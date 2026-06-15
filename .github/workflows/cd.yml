@@ -72,4 +72,15 @@ jobs:
       # ------------------------------------------------------
       - name: Health Check
         run: |
-          curl --fail http://localhost:8000/health
+          for i in {1..12}; do
+              echo "Health check attempt $i..."
+
+              curl --silent --fail http://localhost:8000/health && exit 0
+
+              echo "Waiting for application..."
+
+              sleep 5
+          done
+
+          exit 1
+  
