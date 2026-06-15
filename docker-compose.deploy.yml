@@ -21,7 +21,9 @@ services:
 
     image: postgres:16
 
-    container_name: postgres-db
+    # Dedicated deployment container.
+    # Avoids conflicts with local development containers.
+    container_name: postgres-db-prod
 
     environment:
       POSTGRES_USER: ${DB_USER}
@@ -32,7 +34,7 @@ services:
       - "5432:5432"
 
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_prod_data:/var/lib/postgresql/data
 
 
   # ----------------------------------------------------------
@@ -44,11 +46,12 @@ services:
     # Examples:
     # surajarmugham/diagnostics-api:latest
     # surajarmugham/diagnostics-api:a1b2c3d4
-    # username will be supplied by the CD pipeline.
-    # IMAGE_TAG will be supplied by the CD pipeline.
-    image: ${DOCKERHUB_USERNAME}/diagnostics-api:${IMAGE_TAG}
+    # IMAGE_TAG is supplied by the CD pipeline.
+    image: surajarmugham/diagnostics-api:${IMAGE_TAG}
 
-    container_name: diagnostics-api
+    # Dedicated deployment container.
+    # Avoids conflicts with local development containers.
+    container_name: diagnostics-api-prod
 
     depends_on:
       - postgres-db
@@ -76,4 +79,5 @@ services:
 # ------------------------------------------------------------
 volumes:
 
-  postgres_data:
+  # Persistent database storage for deployment environment.
+  postgres_prod_data:
