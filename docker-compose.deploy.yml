@@ -1,0 +1,79 @@
+# ============================================================
+# Deployment Compose File
+#
+# Purpose:
+# Pull and run application images from Docker Hub.
+#
+# Used By:
+# GitHub Actions CD Pipeline
+#
+# Deployment Commands:
+# docker compose -f docker-compose.deploy.yml pull
+# docker compose -f docker-compose.deploy.yml up -d
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # PostgreSQL Database
+  # ----------------------------------------------------------
+  postgres-db:
+
+    image: postgres:16
+
+    container_name: postgres-db
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
+  # ----------------------------------------------------------
+  # Diagnostics API
+  # ----------------------------------------------------------
+  diagnostics-api:
+
+    # Image produced by the CI pipeline and stored in Docker Hub.
+    # Examples:
+    # surajarmugham/diagnostics-api:latest
+    # surajarmugham/diagnostics-api:a1b2c3d4
+    # username will be supplied by the CD pipeline.
+    # IMAGE_TAG will be supplied by the CD pipeline.
+    image: ${DOCKERHUB_USERNAME}/diagnostics-api:${IMAGE_TAG}
+
+    container_name: diagnostics-api
+
+    depends_on:
+      - postgres-db
+
+    ports:
+      - "8000:8000"
+
+    # Runtime configuration.
+    # Secrets continue to be sourced from the local .env file
+    # on the deployment host.
+    environment:
+      SSH_HOST: host.docker.internal
+      SSH_USER: ${SSH_USER}
+      SSH_PASSWORD: ${SSH_PASSWORD}
+
+      DB_HOST: postgres-db
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+
+# ------------------------------------------------------------
+# Persistent Database Storage
+# ------------------------------------------------------------
+volumes:
+
+  postgres_data:

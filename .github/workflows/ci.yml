@@ -1,19 +1,31 @@
 name: CI Pipeline
 
+# ============================================================
+# CI Pipeline
+#
+# Purpose:
+# 1. Validate source code.
+# 2. Execute unit and API tests.
+# 3. Build Docker image.
+# 4. Publish image to Docker Hub.
+#
+# Artifact Repository:
+# Docker Hub
+# ============================================================
+
 # Trigger workflow on every push and pull request
 on:
   push:
     branches:
       - main
-      - develop
 
   pull_request:
     branches:
       - main
-      - develop
+
 
 jobs:
-  build-test-artifact:
+  build-test-publish:
 
     # GitHub-hosted runner
     runs-on: ubuntu-latest
@@ -72,6 +84,7 @@ jobs:
           docker tag \
           diagnostics-api:${{ github.sha }} \
           ${{ secrets.DOCKERHUB_USERNAME }}/diagnostics-api:${{ github.sha }}
+
 
       # ------------------------------------------------------
       # Step 8 - Push image to Docker Hub.

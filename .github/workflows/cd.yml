@@ -1,0 +1,75 @@
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+
+jobs:
+
+  deploy:
+
+    # Only run if CI completed successfully.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    runs-on: self-hosted
+
+    env:
+      DEPLOY_DIR: /Users/suraj_armugham/deployments/diagnostics_api
+
+    steps:
+
+      # ------------------------------------------------------
+      # Step 1 - Checkout repository.
+      # ------------------------------------------------------
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------
+      # Step 2 - Login to Docker Hub.
+      # ------------------------------------------------------
+      - name: Docker Hub Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ------------------------------------------------------
+      # Step 3 - Export deployment variables.
+      # ------------------------------------------------------
+      - name: Set Deployment Variables
+        run: |
+          echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_ENV
+
+      # ------------------------------------------------------
+      # Step 4 - Deploy application.
+      # Uses deployment-specific .env located outside
+      # the source code repository.
+      # ------------------------------------------------------
+      - name: Deploy Application
+        run: |
+          # Copy latest deployment configuration from repository.
+          mkdir -p $DEPLOY_DIR
+
+          cp docker-compose.deploy.yml $DEPLOY_DIR/
+
+          cd $DEPLOY_DIR
+
+          # Pull all images defined in the deployment compose file.
+          docker compose \
+          -f docker-compose.deploy.yml \
+          pull
+
+          # Deploy containers using the image tag supplied by CI.
+          docker compose \
+          -f docker-compose.deploy.yml \
+          up -d
+
+      # ------------------------------------------------------
+      # Step 5 - Smoke Test.
+      # ------------------------------------------------------
+      - name: Health Check
+        run: |
+          curl --fail http://localhost:8000/health
