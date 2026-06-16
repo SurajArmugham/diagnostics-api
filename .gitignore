@@ -7,6 +7,14 @@
 .env
 
 # ============================================================
+# Kubernetes Secrets
+# ============================================================
+# Contains database passwords, SSH credentials,
+# and other sensitive Kubernetes Secret values.
+# Commit secret-template.yaml instead.
+k8s/secret.yaml
+
+# ============================================================
 # Python Virtual Environment
 # ============================================================
 # Local development dependencies.

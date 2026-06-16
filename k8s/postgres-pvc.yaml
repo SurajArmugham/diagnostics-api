@@ -1,0 +1,32 @@
+apiVersion: v1
+
+# ------------------------------------------------------
+# Persistent Volume Claim
+# ------------------------------------------------------
+# Purpose:
+# Request persistent storage from Kubernetes.
+#
+# Equivalent To:
+# Docker Named Volume
+#
+# Current Usage:
+# PostgreSQL data directory
+#
+# Benefits:
+# - Data survives pod deletion
+# - Data survives container recreation
+# - Storage can be reused
+# ------------------------------------------------------
+kind: PersistentVolumeClaim
+
+metadata:
+  name: postgres-pvc
+
+spec:
+
+  accessModes:
+    - ReadWriteOnce
+
+  resources:
+    requests:
+      storage: 1Gi

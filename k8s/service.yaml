@@ -1,0 +1,48 @@
+apiVersion: v1
+
+# ------------------------------------------------------
+# Service
+# ------------------------------------------------------
+# Provides a stable network endpoint for diagnostics-api
+# pods. Pods are ephemeral and their IP addresses change,
+# but the Service name remains constant.
+#
+# Service Name:
+#   diagnostics-api
+#
+# DNS Name Inside Cluster:
+#   diagnostics-api
+#
+# Service Type:
+#   ClusterIP
+# ------------------------------------------------------
+kind: Service
+
+metadata:
+  name: diagnostics-api
+
+spec:
+
+  # ----------------------------------------------------
+  # Route traffic to pods matching this label.
+  # Must match the label defined in deployment.yaml.
+  # ----------------------------------------------------
+  selector:
+    app: diagnostics-api
+
+  # ----------------------------------------------------
+  # Service Port Mapping
+  #
+  # Service Port   -> 8000
+  # Container Port -> 8000
+  # ----------------------------------------------------
+  ports:
+    - port: 8000
+      targetPort: 8000
+
+  # ----------------------------------------------------
+  # ClusterIP:
+  # Accessible only within the Kubernetes cluster.
+  # Used for internal service-to-service communication.
+  # ----------------------------------------------------
+  type: ClusterIP

@@ -1,0 +1,75 @@
+apiVersion: v1
+
+# ------------------------------------------------------
+# PostgreSQL Service
+# ------------------------------------------------------
+# Purpose:
+# Provide a stable network endpoint for PostgreSQL.
+#
+# Why Service Is Needed:
+# Pods are ephemeral and their IP addresses can change.
+# Applications should never connect directly to Pod IPs.
+#
+# Kubernetes Solution:
+# Service
+#    ↓
+# Stable DNS Name
+#    ↓
+# Stable Virtual IP
+#
+# DNS Name Available Inside Cluster:
+# postgres-db
+#
+# Example:
+# diagnostics-api
+#       ↓
+# postgres-db
+#       ↓
+# PostgreSQL Pod
+# ------------------------------------------------------
+kind: Service
+
+metadata:
+  name: postgres-db
+
+spec:
+
+  # ----------------------------------------------------
+  # Select Pods having this label.
+  #
+  # Must match labels defined in:
+  # postgres-deployment.yaml
+  #
+  # labels:
+  #   app: postgres-db
+  # ----------------------------------------------------
+  selector:
+    app: postgres-db
+
+  # ----------------------------------------------------
+  # Service Port Mapping
+  #
+  # Service Port   -> 5432
+  # Container Port -> 5432
+  #
+  # Clients connect to the Service.
+  # Service forwards traffic to matching Pods.
+  # ----------------------------------------------------
+  ports:
+    - port: 5432
+      targetPort: 5432
+
+  # ----------------------------------------------------
+  # ClusterIP
+  #
+  # Internal cluster communication only.
+  # No external exposure.
+  #
+  # Production Example:
+  # Application Pod
+  #       ↓
+  # postgres-db Service
+  #       ↓
+  # PostgreSQL Pod
+  # ----------------------------------------------------
+  type: ClusterIP

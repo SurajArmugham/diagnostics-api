@@ -1,0 +1,205 @@
+apiVersion: apps/v1
+
+# ------------------------------------------------------
+# PostgreSQL Deployment
+# ------------------------------------------------------
+# Purpose:
+# Deploy PostgreSQL database for the diagnostics API.
+#
+# Current Learning Scope:
+# - Single PostgreSQL Pod
+# - Internal Cluster Access Only
+# - No Persistent Volume Yet
+# - Credentials sourced from Kubernetes Secret
+#
+# Future Enhancements:
+# - PersistentVolume
+# - PersistentVolumeClaim
+# - StatefulSet
+# - Backup Strategy
+# ------------------------------------------------------
+kind: Deployment
+
+metadata:
+  name: postgres-db
+
+spec:
+
+  # ----------------------------------------------------
+  # Single PostgreSQL instance.
+  #
+  # For learning purposes we use one replica.
+  # Databases are usually not horizontally scaled
+  # like stateless applications.
+  # ----------------------------------------------------
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: postgres-db
+
+  template:
+
+    metadata:
+
+      # ------------------------------------------------
+      # Labels used by:
+      # - Deployment Selector
+      # - Service Selector
+      # ------------------------------------------------
+      labels:
+        app: postgres-db
+
+    spec:
+
+      containers:
+
+        # ----------------------------------------------
+        # PostgreSQL Container
+        # ----------------------------------------------
+        - name: postgres-db
+
+          image: postgres:16
+
+          # --------------------------------------------
+          # PostgreSQL listens on port 5432.
+          # postgres-service.yaml routes traffic to this
+          # container port.
+          # --------------------------------------------
+          ports:
+            - containerPort: 5432
+
+          # --------------------------------------------
+          # Persistent Storage Mount
+          # --------------------------------------------
+          # Purpose:
+          # Mount persistent storage inside the container.
+          #
+          # PostgreSQL stores:
+          # - Databases
+          # - Tables
+          # - Indexes
+          # - WAL Logs
+          #
+          # Without PVC:
+          # Pod Deleted
+          #      ↓
+          # Database Files Lost
+          #
+          # With PVC:
+          # Pod Deleted
+          #      ↓
+          # New Pod Created
+          #      ↓
+          # Existing Data Reused
+          #
+          # PostgreSQL default data directory:
+          # /var/lib/postgresql/data
+          # --------------------------------------------
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+
+          env:
+
+            # ------------------------------------------
+            # Non-sensitive configuration.
+            # Could later be moved to ConfigMap.
+            # ------------------------------------------
+            - name: POSTGRES_DB
+              value: diagnostics
+
+            # ------------------------------------------
+            # Sensitive configuration.
+            # Retrieved from Kubernetes Secret.
+            #
+            # Secret:
+            # diagnostics-secret
+            # ------------------------------------------
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: diagnostics-secret
+                  key: DB_USER
+
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: diagnostics-secret
+                  key: DB_PASSWORD
+
+          # --------------------------------------------
+          # Resource Requests and Limits
+          # --------------------------------------------
+          # Purpose:
+          # Define the minimum and maximum resources
+          # PostgreSQL can consume.
+          #
+          # Why Databases Need Resources:
+          # - Query Processing
+          # - Memory Buffers
+          # - Connection Management
+          # - WAL (Write Ahead Log)
+          # - Index Operations
+          #
+          # Requests:
+          # Guaranteed resources used during
+          # Kubernetes scheduling decisions.
+          #
+          # Limits:
+          # Maximum resources PostgreSQL is allowed
+          # to consume.
+          #
+          # Interview Question:
+          # Requests -> Scheduling
+          # Limits   -> Enforcement
+          #
+          # QoS Impact:
+          # No Requests/Limits     -> BestEffort
+          # Requests and Limits    -> Burstable
+          # Requests == Limits     -> Guaranteed
+          # --------------------------------------------
+          resources:
+
+            # ------------------------------------------
+            # Minimum resources required for PostgreSQL.
+            # Kubernetes guarantees these resources.
+            # ------------------------------------------
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+
+            # ------------------------------------------
+            # Maximum resources PostgreSQL may consume.
+            # Protects the node from resource exhaustion.
+            # ------------------------------------------
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+      # ------------------------------------------------
+      # Persistent Volumes
+      # ------------------------------------------------
+      # Purpose:
+      # Attach persistent storage to the PostgreSQL Pod.
+      #
+      # Architecture:
+      # PostgreSQL Pod
+      #        ↓
+      # Volume Mount
+      #        ↓
+      # PersistentVolumeClaim
+      #        ↓
+      # PersistentVolume
+      #        ↓
+      # Disk
+      #
+      # The PVC is created separately in:
+      # postgres-pvc.yaml
+      # ------------------------------------------------
+      volumes:
+
+        - name: postgres-storage
+
+          persistentVolumeClaim:
+            claimName: postgres-pvc

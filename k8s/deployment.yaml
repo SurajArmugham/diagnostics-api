@@ -1,0 +1,324 @@
+apiVersion: apps/v1
+
+# ------------------------------------------------------
+# Deployment
+# ------------------------------------------------------
+# Purpose:
+# Deploy and manage the FastAPI diagnostics application.
+#
+# Responsibilities:
+# - Create Pods.
+# - Maintain desired replica count.
+# - Restart failed Pods.
+# - Support rolling updates.
+#
+# Object Hierarchy:
+# Deployment
+#     ↓
+# ReplicaSet
+#     ↓
+# Pod
+#     ↓
+# Container
+# ------------------------------------------------------
+kind: Deployment
+
+metadata:
+  name: diagnostics-api
+
+spec:
+
+  # ----------------------------------------------------
+  # Number of application instances.
+  #
+  # Future:
+  # replicas: 3
+  # for scaling demonstrations.
+  # ----------------------------------------------------
+  replicas: 3
+
+  # ----------------------------------------------------
+  # Deployment manages Pods having this label.
+  # ----------------------------------------------------
+  selector:
+    matchLabels:
+      app: diagnostics-api
+
+  template:
+
+    metadata:
+
+      # ------------------------------------------------
+      # Pod Labels
+      #
+      # Used by:
+      # - Deployment selector
+      # - Service selector
+      # ------------------------------------------------
+      labels:
+        app: diagnostics-api
+
+    spec:
+
+      containers:
+
+        # ----------------------------------------------
+        # FastAPI Diagnostics Container
+        # ----------------------------------------------
+        - name: diagnostics-api
+
+          # --------------------------------------------
+          # Docker image built by GitHub Actions CI.
+          # Commit SHA tag provides immutable versioning.
+          # --------------------------------------------
+          image: surajarmugham/diagnostics-api:fb14bfe5f6842d417527ef5d072ec6a3c778bd05
+
+          # --------------------------------------------
+          # Application listens on port 8000.
+          # Service will route traffic to this port.
+          # --------------------------------------------
+          ports:
+            - containerPort: 8000
+
+          # --------------------------------------------
+          # Readiness Probe
+          # --------------------------------------------
+          # Purpose:
+          # Determines when the application is ready to
+          # receive traffic.
+          #
+          # Kubernetes Behaviour:
+          # Pod Starts
+          #      ↓
+          # Probe Calls /health
+          #      ↓
+          # Success (HTTP 200)
+          #      ↓
+          # Pod Added To Service Endpoints
+          #
+          # If Probe Fails:
+          # - Container continues running.
+          # - Pod remains NotReady.
+          # - Service does not send traffic.
+          #
+          # Interview Difference:
+          # Readiness Probe -> Controls Traffic
+          # Liveness Probe  -> Controls Restart
+          # --------------------------------------------
+          readinessProbe:
+
+            httpGet:
+              path: /health
+              port: 8000
+
+            # Wait before first health check.
+            initialDelaySeconds: 10
+
+            # Check application health every 5 seconds.
+            periodSeconds: 5
+
+            # Number of consecutive failures before
+            # marking the pod NotReady.
+            failureThreshold: 3
+
+            # Number of successful checks required before
+            # marking the pod Ready.
+            successThreshold: 1
+
+          # --------------------------------------------
+          # Liveness Probe
+          # --------------------------------------------
+          # Purpose:
+          # Detect unhealthy containers and allow
+          # Kubernetes to automatically recover them.
+          #
+          # Kubernetes Behaviour:
+          # Application Running
+          #        ↓
+          # Probe Calls /health
+          #        ↓
+          # Repeated Failures
+          #        ↓
+          # Container Restarted
+          #
+          # Example Production Scenario:
+          # FastAPI Deadlock
+          #        ↓
+          # Process Still Running
+          #        ↓
+          # Requests Stop Working
+          #        ↓
+          # Liveness Probe Fails
+          #        ↓
+          # Kubernetes Restarts Container
+          #
+          # Interview Difference:
+          # Readiness Probe -> Controls Traffic
+          # Liveness Probe  -> Controls Restart
+          # --------------------------------------------
+          livenessProbe:
+
+            httpGet:
+              path: /health
+              port: 8000
+
+            # Allow application startup to complete
+            # before liveness checks begin.
+            initialDelaySeconds: 30
+
+            # Check health every 10 seconds.
+            periodSeconds: 10
+
+            # Restart container after 3 consecutive
+            # health check failures.
+            failureThreshold: 3
+
+          # --------------------------------------------
+          # Resource Requests and Limits
+          # --------------------------------------------
+          # Purpose:
+          # Define how much CPU and Memory this
+          # application requires and the maximum
+          # resources it is allowed to consume.
+          #
+          # Requests:
+          # Guaranteed resources used by Kubernetes
+          # Scheduler when deciding where a Pod can run.
+          #
+          # Limits:
+          # Maximum resources the container can use.
+          #
+          # Interview Question:
+          # Requests -> Scheduling Decision
+          # Limits   -> Resource Enforcement
+          #
+          # Example:
+          # Request CPU 100m
+          #      ↓
+          # Kubernetes guarantees 0.1 CPU
+          #
+          # Limit CPU 500m
+          #      ↓
+          # Container may burst up to 0.5 CPU
+          #
+          # QoS Impact:
+          # No Requests/Limits     -> BestEffort
+          # Requests and Limits    -> Burstable
+          # Requests == Limits     -> Guaranteed
+          # --------------------------------------------
+          resources:
+
+            # ------------------------------------------
+            # Minimum resources required.
+            # Used during scheduling.
+            # ------------------------------------------
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+
+            # ------------------------------------------
+            # Maximum resources allowed.
+            # Protects the cluster from runaway
+            # applications.
+            # ------------------------------------------
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          # --------------------------------------------
+          # Configuration Values
+          #
+          # Source:
+          # diagnostics-config ConfigMap
+          # --------------------------------------------
+          env:
+
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: diagnostics-config
+                  key: DB_HOST
+
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: diagnostics-config
+                  key: DB_PORT
+
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: diagnostics-config
+                  key: DB_NAME
+
+            # ------------------------------------------
+            # Sensitive Values
+            #
+            # Source:
+            # diagnostics-secret
+            # ------------------------------------------
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: diagnostics-secret
+                  key: DB_USER
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: diagnostics-secret
+                  key: DB_PASSWORD
+
+            # ------------------------------------------
+            # SSH Connectivity Configuration
+            #
+            # Diagnostic Target:
+            # Mac Host (outside Kubernetes)
+            #
+            # Flow:
+            # User
+            #   ↓
+            # FastAPI Pod
+            #   ↓
+            # SSH
+            #   ↓
+            # Mac Host
+            #
+            # Source:
+            # diagnostics-config ConfigMap
+            # ------------------------------------------
+            - name: SSH_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: diagnostics-config
+                  key: SSH_HOST
+
+            - name: SSH_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: diagnostics-config
+                  key: SSH_PORT
+
+            # ------------------------------------------
+            # SSH Credentials
+            #
+            # Source:
+            # diagnostics-secret
+            #
+            # Enterprise Examples:
+            # - SSH Username
+            # - SSH Password
+            # - API Tokens
+            # - Service Account Credentials
+            # ------------------------------------------
+            - name: SSH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: diagnostics-secret
+                  key: SSH_USER
+
+            - name: SSH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: diagnostics-secret
+                  key: SSH_PASSWORD

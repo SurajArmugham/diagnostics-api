@@ -1,0 +1,69 @@
+apiVersion: v1
+
+# ------------------------------------------------------
+# ConfigMap
+# ------------------------------------------------------
+# Purpose:
+# Store non-sensitive application configuration.
+#
+# Equivalent To:
+# .env file values that do NOT contain secrets.
+#
+# Examples:
+# - Database Host
+# - Database Port
+# - Database Name
+# - SSH Host
+# - SSH Port
+#
+# Benefits:
+# - Centralized configuration
+# - Environment-specific values
+# - No application code changes required
+#
+# Example:
+# DEV  -> postgres-dev
+# PROD -> postgres-prod
+# ------------------------------------------------------
+kind: ConfigMap
+
+metadata:
+  name: diagnostics-config
+
+data:
+
+  # ----------------------------------------------------
+  # PostgreSQL Service Discovery
+  #
+  # Service Name:
+  # postgres-db
+  #
+  # Kubernetes DNS automatically resolves:
+  # postgres-db -> Service IP
+  # ----------------------------------------------------
+  DB_HOST: postgres-db
+
+  # PostgreSQL listening port.
+  DB_PORT: "5432"
+
+  # Application database name.
+  DB_NAME: diagnostics
+
+  # ----------------------------------------------------
+  # SSH Diagnostic Target
+  #
+  # Current Learning Setup:
+  # Kubernetes Pod
+  #        ↓
+  # SSH
+  #        ↓
+  # Mac Host
+  #
+  # host.docker.internal allows containers running
+  # inside Docker Desktop Kubernetes to reach the
+  # host machine.
+  # ----------------------------------------------------
+  SSH_HOST: host.docker.internal
+
+  # Default SSH Port.
+  SSH_PORT: "22"

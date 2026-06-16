@@ -1,17 +1,39 @@
+# ------------------------------------------------------------
+# Docker Compose Continuous Deployment (CD)
+# ------------------------------------------------------------
+# Purpose:
+# Deploy Diagnostics API using Docker Compose.
+#
+# Architecture:
+#
+# GitHub Action
+#       ↓
+# Self Hosted Runner
+#       ↓
+# Docker Compose
+#       ↓
+# Local Deployment Directory
+#       ↓
+# Containers
+#
+# Trigger:
+# Manual workflow_dispatch
+#
+# Learning Goal:
+# Demonstrate traditional container deployment using
+# Docker Compose before progressing to Kubernetes CD.
+# ------------------------------------------------------------
 name: CD Pipeline
 
 on:
-  workflow_run:
-    workflows: ["CI Pipeline"]
-    types:
-      - completed
+    workflow_dispatch:
 
 jobs:
 
   deploy:
 
     # Only run if CI completed successfully.
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     runs-on: self-hosted
 
@@ -38,10 +60,10 @@ jobs:
       # ------------------------------------------------------
       # Step 3 - Export deployment variables.
       # ------------------------------------------------------
-      - name: Set Deployment Variables
-        run: |
-          echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> $GITHUB_ENV
-          echo "IMAGE_TAG=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_ENV
+      #- name: Set Deployment Variables
+      #  run: |
+      #    echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> $GITHUB_ENV
+      #    echo "IMAGE_TAG=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_ENV
 
       # ------------------------------------------------------
       # Step 4 - Deploy application.

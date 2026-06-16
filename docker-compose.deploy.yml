@@ -47,7 +47,19 @@ services:
     # surajarmugham/diagnostics-api:latest
     # surajarmugham/diagnostics-api:a1b2c3d4
     # IMAGE_TAG is supplied by the CD pipeline.
-    image: surajarmugham/diagnostics-api:${IMAGE_TAG}
+    # --------------------------------------------------------
+    # Static image tag currently deployed.
+    #
+    # Mirrors the Kubernetes deployment image while learning
+    # Docker Compose CD and Kubernetes CD independently.
+    #
+    # Future Enhancement:
+    # Re-enable dynamic image promotion using IMAGE_TAG from
+    # the CI pipeline.
+    # --------------------------------------------------------
+    image: surajarmugham/diagnostics-api:fb14bfe5f6842d417527ef5d072ec6a3c778bd05
+    # Previous dynamic image configuration:
+    # image: surajarmugham/diagnostics-api:${IMAGE_TAG}
 
     # Dedicated deployment container.
     # Avoids conflicts with local development containers.

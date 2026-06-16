@@ -1,0 +1,147 @@
+# ------------------------------------------------------------
+# Kubernetes Continuous Deployment (CD)
+# ------------------------------------------------------------
+# Purpose:
+# Deploy Kubernetes resources from GitHub Actions
+# using a Self-Hosted Runner.
+#
+# Architecture:
+#
+# GitHub Action
+#       ↓
+# Self Hosted Runner (Mac)
+#       ↓
+# kubectl
+#       ↓
+# kubeconfig (~/.kube/config)
+#       ↓
+# Kubernetes API Server
+#       ↓
+# Control Plane
+#       ↓
+# Pods
+#
+# Current Kubernetes Environment:
+#
+# Context:
+# docker-desktop
+#
+# Node:
+# desktop-control-plane
+#
+# Deployment Validation:
+#
+# kubectl apply -f k8s/
+# sleep 10
+# kubectl get pods
+# kubectl port-forward service/diagnostics-api 8000:8000
+# curl http://localhost:8000/health
+#
+# Expected Response:
+# {"status":"UP"}
+#
+# Learning Goal:
+# Demonstrate CI/CD deployment to Kubernetes using
+# the same kubectl workflow commonly used in
+# self-managed enterprise Kubernetes environments.
+# ------------------------------------------------------------
+
+name: Kubernetes CD
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  deploy:
+
+    runs-on: self-hosted
+
+    steps:
+
+      # ------------------------------------------------------
+      # Download repository contents onto the self-hosted
+      # runner so workflow files and Kubernetes manifests
+      # are available locally.
+      # ------------------------------------------------------
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------
+      # Verify kubectl connectivity.
+      #
+      # current-context:
+      # Shows which Kubernetes cluster kubectl will use.
+      #
+      # get nodes:
+      # Confirms the Kubernetes API server is reachable.
+      # ------------------------------------------------------
+      - name: Verify Kubernetes Context
+        run: |
+          kubectl config current-context
+          kubectl get nodes
+
+      # ------------------------------------------------------
+      # Deploy all Kubernetes manifests.
+      #
+      # Includes:
+      # - Deployments
+      # - Services
+      # - ConfigMaps
+      # - PVCs
+      # - Other Kubernetes resources stored in k8s/
+      #
+      # Kubernetes reconciliation loop will create or
+      # update resources to match desired state.
+      # ------------------------------------------------------
+      - name: Deploy Kubernetes Resources
+        run: |
+          kubectl apply -f k8s/
+
+      # ------------------------------------------------------
+      # Allow time for Kubernetes to schedule Pods,
+      # pull images and complete startup.
+      # ------------------------------------------------------
+      - name: Wait For Pods
+        run: |
+          sleep 10
+
+      # ------------------------------------------------------
+      # Basic deployment verification.
+      #
+      # get pods:
+      # Validate Pods are running.
+      #
+      # get deployments:
+      # Validate desired replicas are available.
+      #
+      # get services:
+      # Validate service discovery resources exist.
+      # ------------------------------------------------------
+      - name: Verify Cluster Resources
+        run: |
+          kubectl get pods
+          kubectl get deployments
+          kubectl get services
+
+      # ------------------------------------------------------
+      # Smoke Test
+      #
+      # Create temporary port-forward from runner
+      # to Kubernetes Service.
+      #
+      # Service
+      #      ↓
+      # Pod
+      #      ↓
+      # FastAPI Application
+      #
+      # Health endpoint verifies application startup.
+      # ------------------------------------------------------
+      - name: Smoke Test Diagnostics API
+        run: |
+          kubectl port-forward service/diagnostics-api 8000:8000 >/tmp/port-forward.log 2>&1 &
+
+          sleep 5
+
+          curl http://localhost:8000/health
