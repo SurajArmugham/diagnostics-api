@@ -1,0 +1,180 @@
+# ============================================================
+# Kubernetes Ingress
+# ============================================================
+#
+# Purpose:
+# Expose HTTP and HTTPS traffic to services
+# inside the Kubernetes cluster.
+#
+# Current Learning Goal:
+# Route requests for diagnostics.local
+# to the diagnostics-api service.
+#
+# Traditional Infrastructure:
+#
+# Browser
+#    ↓
+# Apache / NGINX Reverse Proxy
+#    ↓
+# Application
+#
+# Kubernetes Equivalent:
+#
+# Browser
+#    ↓
+# Ingress Controller
+#    ↓
+# Service
+#    ↓
+# Pods
+#
+# ============================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+metadata:
+  name: diagnostics-api-ingress
+
+spec:
+
+  # ----------------------------------------------------------
+  # Ingress Controller Selection
+  #
+  # Use the NGINX Ingress Controller installed in the cluster.
+  # Verified using:
+  #
+  # kubectl get ingressclass
+  #
+  # Result:
+  # nginx
+  # ----------------------------------------------------------
+  ingressClassName: nginx
+
+  # ----------------------------------------------------------
+  # TLS / HTTPS Configuration
+  #
+  # Purpose:
+  # Enable HTTPS for diagnostics.local.
+  #
+  # Traditional NGINX Equivalent:
+  #
+  # ssl_certificate     diagnostics.local.crt;
+  # ssl_certificate_key diagnostics.local.key;
+  #
+  # Kubernetes Equivalent:
+  #
+  # TLS Secret
+  # diagnostics-tls
+  #
+  # Stores:
+  # - tls.crt
+  # - tls.key
+  #
+  # TLS Termination Flow:
+  #
+  # Browser
+  #    ↓ HTTPS
+  # Ingress Controller
+  #    ↓ HTTP
+  # Service
+  #    ↓
+  # Pods
+  #
+  # Note:
+  # The FastAPI application continues listening on
+  # HTTP port 8000. HTTPS terminates at Ingress.
+  # ----------------------------------------------------------
+  tls:
+    - hosts:
+        - diagnostics.local
+
+      # TLS Secret containing:
+      # - tls.crt
+      # - tls.key
+      secretName: diagnostics-tls
+
+  rules:
+
+    # --------------------------------------------------------
+    # Host-Based and Path-Based Routing
+    #
+    # Requests sent to:
+    #
+    # http://diagnostics.local
+    # https://diagnostics.local
+    #
+    # are evaluated against the path rules below.
+    #
+    # Learning Goal:
+    # Demonstrate how a single hostname can route
+    # traffic based on URL paths.
+    #
+    # Enterprise Example:
+    #
+    # api.company.com/health
+    # api.company.com/docs
+    # api.company.com/api
+    #
+    # Each path could route to a different Service.
+    #
+    # For this lab, all paths route to the same
+    # diagnostics-api Service.
+    # --------------------------------------------------------
+    - host: diagnostics.local
+
+      http:
+
+        paths:
+
+          # --------------------------------------------------
+          # Health Endpoint
+          #
+          # Example:
+          # http://diagnostics.local/health
+          #
+          # Used by Kubernetes probes and operational checks.
+          # --------------------------------------------------
+          - path: /health
+            pathType: Prefix
+
+            backend:
+              service:
+                name: diagnostics-api
+                port:
+                  number: 8000
+
+          # --------------------------------------------------
+          # FastAPI Swagger Documentation
+          #
+          # Example:
+          # http://diagnostics.local/docs
+          #
+          # In enterprise environments this path could be
+          # routed to a dedicated documentation service.
+          # --------------------------------------------------
+          - path: /docs
+            pathType: Prefix
+
+            backend:
+              service:
+                name: diagnostics-api
+                port:
+                  number: 8000
+
+          # --------------------------------------------------
+          # API Root Path
+          #
+          # Catch-all route.
+          #
+          # Requests not matched by more specific rules
+          # are routed here.
+          # --------------------------------------------------
+          - path: /
+            pathType: Prefix
+
+            backend:
+              service:
+                name: diagnostics-api
+                port:
+                  number: 8000

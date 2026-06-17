@@ -145,12 +145,18 @@ CI:
 * Python Setup
 * Install Dependencies
 * Pytest
+
+Current Scope:
+
+Testing and validation only.
+
+Future Enhancement:
+
 * Docker Build
-* Docker Push
+* Docker Hub Push
 
-CD:
+CD (Manual Workflow):
 
-* Pull Latest Image
 * Docker Compose Deployment
 * Health Check
 
@@ -177,6 +183,68 @@ Self Hosted Runner
 Docker Compose
 ↓
 Diagnostics API
+
+⸻
+
+Phase 7 - Kubernetes CD
+
+GitHub Repository:
+
+diagnostic_api
+
+Deployment Target:
+
+Docker Desktop Kubernetes
+
+Deployment Method:
+
+GitHub Actions Manual Workflow
+
+Workflow:
+
+k8s-cd.yml
+
+Deployment Flow:
+
+GitHub Action
+↓
+Self Hosted Runner
+↓
+kubectl
+↓
+kubeconfig (~/.kube/config)
+↓
+Kubernetes API Server
+↓
+Control Plane
+↓
+Pods
+
+Deployment Validation:
+
+* kubectl apply -f k8s/
+* sleep 10
+* kubectl get pods
+* kubectl port-forward service/diagnostics-api 8000:8000
+* curl http://localhost:8000/health
+
+Smoke Test Result:
+
+{"status":"UP"}
+
+Key Learning:
+
+The GitHub runner does not require Kubernetes to run locally inside the workflow.
+
+The runner only requires:
+
+* kubectl
+* kubeconfig
+* Network access to Kubernetes API Server
+
+Kubernetes CD Status:
+
+✓ Working Successfully
 
 ⸻
 
@@ -599,12 +667,290 @@ Kubernetes Concepts Learned
 ✓ kubectl exec
 ✓ kubectl logs
 ✓ kubectl describe
+✓ Ingress Controller
+✓ IngressClass
+✓ Host-Based Routing
+✓ Path-Based Routing
+✓ TLS Secret
+✓ HTTPS
+✓ TLS Termination
+✓ OpenSSL Certificate Management
+
+⸻
+
+Ingress Controller
+
+Installed:
+
+ingress-nginx
+
+Namespace:
+
+ingress-nginx
+
+Verified:
+
+kubectl get pods -n ingress-nginx
+kubectl get svc -n ingress-nginx
+kubectl get ingressclass
+
+Learned:
+
+* Ingress Controller acts as a Layer 7 reverse proxy.
+* Similar to NGINX / Apache HTTPD reverse proxy concepts.
+* Receives HTTP/HTTPS traffic and routes requests to Services.
+* Ingress is not a replacement for Services.
+* Ingress sits in front of Services.
+
+Architecture:
+
+Client
+↓
+Ingress Controller
+↓
+Service
+↓
+Pods
+
+⸻
+
+Host-Based Routing
+
+Implemented:
+
+Host:
+
+diagnostics.local
+
+Ingress Rule:
+
+Host: diagnostics.local
+↓
+diagnostics-api Service
+
+Learned:
+
+* Host header determines routing decisions.
+* Requests with unmatched Host headers return 404 from NGINX.
+* Ingress evaluates Host rules before forwarding traffic.
+
+Validation:
+
+curl http://localhost:8080/health \
+-H "Host: diagnostics.local"
+
+Result:
+
+{"status":"UP"}
+
+⸻
+
+Path-Based Routing
+
+Implemented:
+
+* /
+* /health
+* /docs
+
+Backend:
+
+All paths currently route to diagnostics-api Service.
+
+Learned:
+
+* A single hostname can route multiple paths.
+* Enterprise environments often route different paths to different Services.
+* Longest matching path is evaluated first.
+
+Enterprise Example:
+
+api.company.com/docs
+↓
+documentation-service
+
+api.company.com/api
+↓
+backend-service
+
+api.company.com/health
+↓
+health-service
+
+⸻
+
+TLS / HTTPS
+
+Created:
+
+certs/
+├── diagnostics.local.crt
+└── diagnostics.local.key
+
+Generated Using:
+
+OpenSSL
+
+Command:
+
+openssl req -x509 ...
+
+Learned:
+
+* Self-signed certificate creation.
+* Certificate contains public key.
+* Private key must remain protected.
+* HTTPS requires certificate + private key.
+
+Certificate Verification:
+
+openssl x509 -in diagnostics.local.crt -text -noout
+
+Observed:
+
+Subject: CN=diagnostics.local
+Issuer: CN=diagnostics.local
+
+Result:
+
+Self-signed certificate.
+
+⸻
+
+Kubernetes TLS Secret
+
+Created:
+
+diagnostics-tls
+
+Type:
+
+kubernetes.io/tls
+
+Contains:
+
+* tls.crt
+* tls.key
+
+Learned:
+
+Opaque Secret
+-------------
+Application credentials.
+
+TLS Secret
+----------
+Certificates and private keys.
+
+Verification:
+
+kubectl describe secret diagnostics-tls
+
+Observed:
+
+tls.crt
+tls.key
+
+⸻
+
+TLS Termination
+
+Implemented:
+
+Browser
+↓ HTTPS
+Ingress Controller
+↓ HTTP
+Service
+↓
+Pods
+
+Learned:
+
+* Application does not need to implement HTTPS.
+* Ingress can terminate TLS.
+* Internal cluster traffic can remain HTTP.
+* Most enterprise Kubernetes deployments use TLS termination.
+
+Ingress Verification:
+
+kubectl describe ingress diagnostics-api-ingress
+
+Observed:
+
+TLS:
+  diagnostics-tls terminates diagnostics.local
+
+⸻
+
+HTTPS Validation
+
+Port Forward:
+
+kubectl port-forward service/ingress-nginx-controller \
+-n ingress-nginx 8080:80 8443:443
+
+HTTP Test:
+
+curl http://localhost:8080/health \
+-H "Host: diagnostics.local"
+
+HTTPS Test:
+
+curl -k https://localhost:8443/health \
+-H "Host: diagnostics.local"
+
+Result:
+
+{"status":"UP"}
+
+TLS Verification:
+
+openssl s_client \
+-connect localhost:8443 \
+-servername diagnostics.local
+
+Observed:
+
+subject=CN=diagnostics.local
+issuer=CN=diagnostics.local
+Protocol: TLSv1.3
+
+Learned:
+
+* TLS handshake validation.
+* Certificate inspection.
+* HTTPS troubleshooting.
+* Self-signed certificate behavior.
+
+⸻
+
+Ingress Concepts Learned
+
+✓ Ingress Controller
+✓ IngressClass
+✓ Host-Based Routing
+✓ Path-Based Routing
+✓ Reverse Proxy Concepts
+✓ TLS Certificates
+✓ OpenSSL
+✓ TLS Secret
+✓ HTTPS
+✓ TLS Termination
+✓ TLS Validation
+✓ Certificate Inspection
 
 ⸻
 
 Current Architecture
 
-User
+GitHub Actions
+↓
+Self Hosted Runner
+↓
+kubectl
+↓
+Docker Desktop Kubernetes
 ↓
 Service (diagnostics-api)
 ↓
@@ -644,7 +990,8 @@ diagnostic_api/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml
-│       └── cd.yml
+│       ├── cd.yml
+│       └── k8s-cd.yml
 │
 └── project_history.md
 
@@ -652,28 +999,22 @@ diagnostic_api/
 
 Next Planned Topics
 
-1. Kubernetes CI/CD Deployment
-2. Ingress
-3. Advanced Troubleshooting
-4. Monitoring
-5. Alerting
+1. Rolling Updates
+2. Rollbacks
+3. Horizontal Pod Autoscaler (HPA)
+4. Advanced Troubleshooting
+5. Monitoring
+6. Alerting
 
 ⸻
 
-Interview Readiness Topics Covered
+Phase Status
 
-Docker
-Docker Compose
-GitHub Actions
-Self Hosted Runners
-FastAPI
-PostgreSQL
-SSH
-Kubernetes Deployments
-Services
-ConfigMaps
-Secrets
-Scaling
-Rolling Updates
-Readiness Probes
-Liveness Probes
+✓ Phase 1 - FastAPI
+✓ Phase 2 - SSH Diagnostics
+✓ Phase 3 - PostgreSQL
+✓ Phase 4 - Docker
+✓ Phase 5 - Docker Compose
+✓ Phase 6 - GitHub Actions CI/CD
+✓ Phase 7 - Kubernetes
+✓ Phase 7 - Kubernetes CD

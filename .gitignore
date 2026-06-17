@@ -11,8 +11,37 @@
 # ============================================================
 # Contains database passwords, SSH credentials,
 # and other sensitive Kubernetes Secret values.
-# Commit secret-template.yaml instead.
+#
+# These files are created manually in the target
+# Kubernetes environment and should never be
+# committed to source control.
+#
+# Examples:
+# - diagnostics-secret (Opaque Secret)
+# - diagnostics-tls (TLS Secret)
+#
+# Apply manually:
+# kubectl apply -f k8s/secret.yaml
+# kubectl apply -f k8s/tls-secret.yaml
 k8s/secret.yaml
+k8s/tls-secret.yaml
+
+# ============================================================
+# TLS Certificates
+# ============================================================
+# Self-signed certificates used for local
+# Ingress HTTPS testing.
+#
+# Generated using OpenSSL:
+# openssl req -x509 ...
+#
+# Production environments typically use:
+# - Corporate CA
+# - Let's Encrypt
+# - cert-manager
+#
+# Never commit private keys.
+certs/
 
 # ============================================================
 # Python Virtual Environment
