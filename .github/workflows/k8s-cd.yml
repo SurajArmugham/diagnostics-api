@@ -11,6 +11,10 @@
 #       ↓
 # Self Hosted Runner (Mac)
 #       ↓
+# Infisical Cloud
+#       ↓
+# Kubernetes Secret
+#       ↓
 # kubectl
 #       ↓
 # kubeconfig (~/.kube/config)
@@ -44,6 +48,21 @@
 # Demonstrate CI/CD deployment to Kubernetes using
 # the same kubectl workflow commonly used in
 # self-managed enterprise Kubernetes environments.
+#
+# Secret Management Enhancement:
+#
+# Infisical Cloud
+#       ↓
+# Universal Auth
+#       ↓
+# Secret Retrieval
+#       ↓
+# Kubernetes Secret
+#       ↓
+# Pods
+#
+# Secret rotation can now be performed in
+# Infisical without modifying Kubernetes manifests.
 # ------------------------------------------------------------
 
 name: Kubernetes CD
@@ -82,6 +101,108 @@ jobs:
           kubectl get nodes
 
       # ------------------------------------------------------
+      # Retrieve Runtime Secrets From Infisical
+      # ------------------------------------------------------
+      # Purpose:
+      # Authenticate to Infisical Cloud using a
+      # Machine Identity and retrieve the latest
+      # application credentials.
+      #
+      # Architecture:
+      #
+      # GitHub Actions
+      #        ↓
+      # INFISICAL_CLIENT_ID
+      # INFISICAL_CLIENT_SECRET
+      #        ↓
+      # Universal Auth
+      #        ↓
+      # Access Token
+      #        ↓
+      # Infisical Cloud
+      #        ↓
+      # Secret Retrieval
+      #        ↓
+      # Kubernetes Secret
+      #        ↓
+      # Pods
+      #
+      # Secrets Retrieved:
+      #
+      # - DB_USER
+      # - DB_PASSWORD
+      # - SSH_USER
+      # - SSH_PASSWORD
+      #
+      # Benefits:
+      #
+      # - Centralized Secret Management
+      # - Secret Rotation Support
+      # - No Credentials Stored In Git
+      # - Dynamic Kubernetes Secret Updates
+      #
+      # GitHub Repository Secrets:
+      #
+      # INFISICAL_CLIENT_ID
+      # INFISICAL_CLIENT_SECRET
+      #
+      # GitHub Repository Variables:
+      #
+      # INFISICAL_PROJECT_ID
+      # INFISICAL_ENVIRONMENT
+      # ------------------------------------------------------
+      - name: Retrieve Secrets From Infisical
+        env:
+          INFISICAL_CLIENT_ID: ${{ secrets.INFISICAL_CLIENT_ID }}
+          INFISICAL_CLIENT_SECRET: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          INFISICAL_PROJECT_ID: ${{ secrets.INFISICAL_PROJECT_ID }}
+          INFISICAL_ENVIRONMENT: ${{ vars.INFISICAL_ENVIRONMENT }}
+        run: |
+
+          echo "Authenticating to Infisical..."
+
+          ACCESS_TOKEN=$(curl --silent \
+            --location \
+            --request POST \
+            'https://app.infisical.com/api/v1/auth/universal-auth/login' \
+            --header 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode "clientId=${INFISICAL_CLIENT_ID}" \
+            --data-urlencode "clientSecret=${INFISICAL_CLIENT_SECRET}" \
+            | jq -r '.accessToken')
+
+          echo "Access token acquired."
+
+          echo "Retrieving secrets from Infisical..."
+
+          SECRET_RESPONSE=$(curl --silent \
+            --request GET \
+            --url "https://us.infisical.com/api/v4/secrets?secretPath=%2F&viewSecretValue=true&expandSecretReferences=true&recursive=false&includePersonalOverrides=false&includeImports=true&projectId=${INFISICAL_PROJECT_ID}&environment=${INFISICAL_ENVIRONMENT}" \
+            --header "Authorization: Bearer ${ACCESS_TOKEN}")
+
+          echo "Secrets retrieved successfully."
+
+          echo "Validating secret count..."
+
+          echo "$SECRET_RESPONSE" | jq '.secrets | length'
+
+          DB_USER=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="DB_USER") | .secretValue')
+          DB_PASSWORD=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="DB_PASSWORD") | .secretValue')
+          SSH_USER=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="SSH_USER") | .secretValue')
+          SSH_PASSWORD=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="SSH_PASSWORD") | .secretValue')
+
+          echo "Updating Kubernetes Secret..."
+
+          kubectl create secret generic diagnostics-secret \
+            --from-literal=DB_USER="$DB_USER" \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=SSH_USER="$SSH_USER" \
+            --from-literal=SSH_PASSWORD="$SSH_PASSWORD" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+          echo "Kubernetes Secret updated successfully."
+
+      # ------------------------------------------------------
       # Deploy all Kubernetes manifests.
       #
       # Includes:
@@ -89,6 +210,8 @@ jobs:
       # - Services
       # - ConfigMaps
       # - PVCs
+      # - Ingress
+      # - TLS Resources
       # - Other Kubernetes resources stored in k8s/
       #
       # Kubernetes reconciliation loop will create or
@@ -117,12 +240,20 @@ jobs:
       #
       # get services:
       # Validate service discovery resources exist.
+      #
+      # get ingress:
+      # Validate ingress resources exist.
+      #
+      # get secrets:
+      # Validate diagnostics-secret exists.
       # ------------------------------------------------------
       - name: Verify Cluster Resources
         run: |
           kubectl get pods
           kubectl get deployments
           kubectl get services
+          kubectl get ingress
+          kubectl get secret diagnostics-secret
 
       # ------------------------------------------------------
       # Smoke Test
