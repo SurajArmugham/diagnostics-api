@@ -940,7 +940,307 @@ Ingress Concepts Learned
 ✓ TLS Validation
 ✓ Certificate Inspection
 
+
+
 ⸻
+
+Phase 8 - Infisical Cloud Secret Management
+
+Objective
+
+Introduce centralized secret management into the Kubernetes deployment pipeline while keeping application code and Kubernetes deployment manifests unchanged.
+
+The goal is to simulate a common enterprise secret-management workflow where application credentials are stored in a dedicated secret-management platform rather than in source control.
+
+⸻
+
+Previous Secret Management Model
+
+secret.yaml
+↓
+Kubernetes Secret
+↓
+Pods
+
+Limitations:
+
+* Secret rotation required manifest updates.
+* Credentials could exist in multiple locations.
+* Git repositories could become a source of truth for secrets.
+* Difficult to demonstrate centralized secret management.
+
+⸻
+
+Selected Solution
+
+Evaluated:
+
+* HashiCorp Vault OSS
+* HashiCorp Cloud Vault
+* Cloud Secret Managers
+* Infisical Cloud
+
+Selected:
+
+Infisical Cloud
+
+Reasons:
+
+* Free tier available.
+* Cloud-hosted solution.
+* No infrastructure management required.
+* Supports Machine Identities.
+* Supports Universal Authentication.
+* Supports API-based secret retrieval.
+* Supports secret rotation demonstrations.
+* Closely resembles enterprise secret-management workflows.
+
+⸻
+
+Infisical Configuration
+
+Created:
+
+Project:
+diagnostic-api
+
+Environment:
+dev
+
+Stored Secrets:
+
+* DB_USER
+* DB_PASSWORD
+* SSH_USER
+* SSH_PASSWORD
+
+Created:
+
+Machine Identity:
+github-actions
+
+Role:
+Viewer
+
+Permissions:
+
+diagnostic-api / dev
+
+Learned:
+
+Principle Of Least Privilege
+
+The deployment workflow only requires permission to read secrets.
+
+⸻
+
+Universal Authentication
+
+Implemented:
+
+GitHub Actions
+↓
+INFISICAL_CLIENT_ID
+INFISICAL_CLIENT_SECRET
+↓
+Universal Auth
+↓
+Access Token
+↓
+Infisical APIs
+
+Validation:
+
+Successfully authenticated using:
+
+POST
+/api/v1/auth/universal-auth/login
+
+Observed:
+
+* accessToken
+* expiresIn
+* tokenType
+
+Result:
+
+Authentication Successful
+
+⸻
+
+Secret Retrieval Validation
+
+Validated:
+
+* List Secrets API
+* Get Secret By Name API
+
+Successfully Retrieved:
+
+* DB_USER
+* DB_PASSWORD
+* SSH_USER
+* SSH_PASSWORD
+
+Architecture:
+
+GitHub Actions
+↓
+Universal Auth
+↓
+Access Token
+↓
+Infisical Cloud
+↓
+Application Secrets
+
+Result:
+
+Authorization Successful
+
+⸻
+
+GitHub Actions Integration
+
+Enhanced:
+
+.github/workflows/k8s-cd.yml
+
+Added:
+
+* Infisical Authentication
+* Access Token Generation
+* Secret Retrieval
+* jq JSON Parsing
+* Dynamic Kubernetes Secret Creation
+
+Deployment Flow:
+
+GitHub Actions
+↓
+Self Hosted Runner
+↓
+Infisical Cloud
+↓
+Secret Retrieval
+↓
+diagnostics-secret
+↓
+kubectl apply -f k8s/
+↓
+Pods
+
+⸻
+
+Dynamic Kubernetes Secret Creation
+
+Implemented:
+
+kubectl create secret generic diagnostics-secret
+
+Type:
+
+Opaque
+
+Contains:
+
+* DB_USER
+* DB_PASSWORD
+* SSH_USER
+* SSH_PASSWORD
+
+Result:
+
+Application consumed dynamically generated secrets without requiring code changes.
+
+⸻
+
+Secret Recreation Validation
+
+Test Performed:
+
+kubectl delete secret diagnostics-secret
+
+Observed:
+
+Secret removed from cluster.
+
+Action:
+
+Executed Kubernetes CD workflow.
+
+Observed:
+
+GitHub Actions
+↓
+Infisical Authentication
+↓
+Secret Retrieval
+↓
+Kubernetes Secret Recreation
+
+Verification:
+
+kubectl describe secret diagnostics-secret
+
+Observed:
+
+Type: Opaque
+
+DB_USER
+DB_PASSWORD
+SSH_USER
+SSH_PASSWORD
+
+Result:
+
+Secret recreated successfully from Infisical.
+
+⸻
+
+Secret Rotation Capability
+
+Current Capability:
+
+Infisical
+↓
+Update Secret
+↓
+Run Kubernetes CD Workflow
+↓
+Retrieve Latest Secret
+↓
+Update Kubernetes Secret
+↓
+Pods Consume Updated Secret
+
+Benefits:
+
+* No application code changes.
+* No Git commits required.
+* No Kubernetes manifest updates required.
+* Centralized source of truth.
+* Enterprise-style secret lifecycle management.
+
+⸻
+
+Additional Concepts Learned
+
+✓ Centralized Secret Management
+✓ Machine Identity
+✓ Universal Authentication
+✓ Access Tokens
+✓ Bearer Authentication
+✓ Secret Retrieval APIs
+✓ Authorization vs Authentication
+✓ Principle Of Least Privilege
+✓ Dynamic Kubernetes Secret Creation
+✓ Secret Lifecycle Automation
+✓ Secret Rotation Concepts
+✓ jq JSON Parsing
+✓ Infisical Cloud Integration
+
+
 
 Current Architecture
 
@@ -948,9 +1248,19 @@ GitHub Actions
 ↓
 Self Hosted Runner
 ↓
+Infisical Cloud
+↓
+Universal Auth
+↓
+Access Token
+↓
+Kubernetes Secret (diagnostics-secret)
+↓
 kubectl
 ↓
 Docker Desktop Kubernetes
+↓
+Ingress Controller
 ↓
 Service (diagnostics-api)
 ↓
@@ -963,48 +1273,19 @@ PostgreSQL Pod
 Configuration:
 
 ConfigMap
-Secret
+↓
+Non-Sensitive Configuration
+
+Infisical Cloud
+↓
+Kubernetes Secret
+↓
+Sensitive Configuration
 
 Health:
 
 Readiness Probe
 Liveness Probe
-
-Structure:
-diagnostic_api/
-│
-├── app/
-├── tests/
-├── k8s/
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   ├── postgres-deployment.yaml
-│   ├── postgres-service.yaml
-│   ├── configmap.yaml
-│   └── secret.yaml
-│
-├── Dockerfile
-├── docker-compose.yml
-├── docker-compose.deploy.yml
-│
-├── .github/
-│   └── workflows/
-│       ├── ci.yml
-│       ├── cd.yml
-│       └── k8s-cd.yml
-│
-└── project_history.md
-
-⸻
-
-Next Planned Topics
-
-1. Rolling Updates
-2. Rollbacks
-3. Horizontal Pod Autoscaler (HPA)
-4. Advanced Troubleshooting
-5. Monitoring
-6. Alerting
 
 ⸻
 
@@ -1018,3 +1299,4 @@ Phase Status
 ✓ Phase 6 - GitHub Actions CI/CD
 ✓ Phase 7 - Kubernetes
 ✓ Phase 7 - Kubernetes CD
+✓ Phase 8 - Infisical Secret Management

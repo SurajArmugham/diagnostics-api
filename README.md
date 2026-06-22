@@ -20,6 +20,7 @@ This project was built to gain practical experience with:
 * Kubernetes networking
 * Kubernetes storage
 * Ingress and TLS
+* Centralized Secret Management (Infisical)
 
 The project is designed as a portfolio project for:
 
@@ -97,6 +98,7 @@ Kubernetes	Docker Desktop Kubernetes
 Ingress	ingress-nginx
 TLS	OpenSSL
 Storage	PVC / PV
+Secret Management	Infisical Cloud
 
 ⸻
 
@@ -107,6 +109,12 @@ Kubernetes Deployment
 GitHub Actions
         ↓
 Self Hosted Runner
+        ↓
+Infisical Cloud
+        ↓
+Universal Auth
+        ↓
+Kubernetes Secret
         ↓
 kubectl
         ↓
@@ -190,12 +198,28 @@ SSH_PORT
 
 Secret
 
+Source:
+
+Infisical Cloud
+        ↓
+GitHub Actions
+        ↓
+diagnostics-secret
+
 Used for:
 
 DB_USER
 DB_PASSWORD
 SSH_USER
 SSH_PASSWORD
+
+Learned:
+
+* Machine Identities
+* Universal Authentication
+* Access Tokens
+* Secret Retrieval APIs
+* Secret Rotation Concepts
 
 TLS Secret
 
@@ -319,11 +343,13 @@ GitHub Action
     ↓
 Self Hosted Runner
     ↓
+Infisical Cloud
+    ↓
+Secret Retrieval
+    ↓
+Kubernetes Secret
+    ↓
 kubectl
-    ↓
-kubeconfig
-    ↓
-Kubernetes Cluster
 
 Validation:
 
@@ -350,7 +376,7 @@ diagnostic_api/
 │   ├── postgres-service.yaml
 │   ├── postgres-pvc.yaml
 │   ├── configmap.yaml
-│   ├── secret.yaml
+│   ├── secret-template.yaml
 │   └── tls-secret.yaml
 │
 ├── .github/
@@ -397,6 +423,12 @@ Implemented and validated:
 * TLS Secrets
 * HTTPS
 * TLS Termination
+* Machine Identity Authentication
+* Universal Authentication
+* Infisical Cloud
+* Centralized Secret Management
+* Secret Rotation Concepts
+* Dynamic Kubernetes Secret Creation
 
 ⸻
 
@@ -413,8 +445,36 @@ Planned:
 * Prometheus
 * Grafana
 * cert-manager
-* External Secrets
+* External Secrets Operator
+* Secret Rotation Automation
+* HashiCorp Vault Integration
+
+⸻
+
+Secret Management Architecture
+
+Infisical Cloud
+        ↓
+Machine Identity
+        ↓
+Universal Authentication
+        ↓
+Access Token
+        ↓
+GitHub Actions
+        ↓
+Kubernetes Secret (diagnostics-secret)
+        ↓
+FastAPI Pods
+
+Benefits:
+
+* Centralized Secret Management
+* No Credentials Stored In Git
+* Secret Rotation Support
+* Enterprise-style Secret Lifecycle Management
+* Dynamic Kubernetes Secret Creation
 
 suraj_armugham@ProBook diagnostic_api % curl -k https://localhost:8443/health \                
   -H "Host: diagnostics.local"
-{"status":"UP"}                                              
+{"status":"UP"}                                             
