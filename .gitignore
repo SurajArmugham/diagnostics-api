@@ -83,3 +83,17 @@ htmlcov/
 # Application Logs
 # ============================================================
 *.log
+
+# ============================================================
+# Claude Code Context
+# ============================================================
+# Local AI-assistant context file. Contains
+# machine-specific paths and session state,
+# not project documentation.
+#
+# Project documentation lives in:
+# - README.md
+# - project_history.md
+# - auth_guide.md
+CLAUDE.md
+CLAUDE.local.md

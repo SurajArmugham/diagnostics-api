@@ -84,6 +84,42 @@ Examples:
 
 ⸻
 
+API Authentication
+
+JWT bearer authentication protects all business endpoints.
+
+Flow:
+
+Client
+ ↓
+POST /token
+(username + password, form-encoded)
+ ↓
+Signed JWT (HS256, 30 minute expiry)
+ ↓
+Authorization: Bearer <jwt>
+ ↓
+Protected Routes
+
+Protected:
+
+* POST /diagnostics
+* GET /audit-history
+
+Open (Kubernetes probes):
+
+* GET /health
+
+Credentials and the JWT signing key are stored in Infisical Cloud
+and delivered to pods via the diagnostics-secret Kubernetes Secret.
+
+Operator guide:
+
+auth_guide.md
+(token commands, expiry, secret checklist, troubleshooting)
+
+⸻
+
 Technology Stack
 
 Component	Technology
@@ -99,6 +135,7 @@ Ingress	ingress-nginx
 TLS	OpenSSL
 Storage	PVC / PV
 Secret Management	Infisical Cloud
+Authentication	JWT (PyJWT, OAuth2 Password Flow)
 
 ⸻
 
@@ -429,6 +466,13 @@ Implemented and validated:
 * Centralized Secret Management
 * Secret Rotation Concepts
 * Dynamic Kubernetes Secret Creation
+* JWT Bearer Authentication
+* OAuth2 Password Flow
+* Token Expiry (exp claim)
+* Stateless Token Verification
+* Constant-Time Comparison
+* Swagger UI Authorize
+* CI Publish Gating (push vs pull_request)
 
 ⸻
 
@@ -448,6 +492,12 @@ Planned:
 * External Secrets Operator
 * Secret Rotation Automation
 * HashiCorp Vault Integration
+* bcrypt Password Hashing
+* Rate Limiting
+* Security Headers (HSTS, CSP)
+* Refresh Tokens
+* RBAC Scopes
+* SSH Key-Based Authentication
 
 ⸻
 
@@ -466,6 +516,13 @@ GitHub Actions
 Kubernetes Secret (diagnostics-secret)
         ↓
 FastAPI Pods
+
+Secrets Delivered:
+
+* DB_USER / DB_PASSWORD
+* SSH_USER / SSH_PASSWORD
+* API_USERNAME / API_PASSWORD
+* JWT_SECRET_KEY
 
 Benefits:
 

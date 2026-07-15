@@ -1240,6 +1240,144 @@ Additional Concepts Learned
 ✓ jq JSON Parsing
 ✓ Infisical Cloud Integration
 
+⸻
+
+Phase 9 - JWT Bearer Authentication
+
+Objective
+
+Secure all business endpoints of the API. Previously every endpoint was anonymous - anyone reaching the API could trigger SSH sessions into the host or read the audit trail.
+
+The goal is to implement the same machine-to-machine authentication pattern already used by the CD pipeline against Infisical (credentials → access token → Bearer header), but with our API acting as the token issuer and verifier instead of consuming someone else's.
+
+⸻
+
+Authentication Model
+
+Client
+↓
+POST /token
+(API_USERNAME + API_PASSWORD, form-encoded)
+↓
+Signed JWT
+(HS256, JWT_SECRET_KEY, 30 minute expiry)
+↓
+Authorization: Bearer <jwt>
+↓
+Protected Routes
+
+Protected:
+
+* POST /diagnostics
+* GET /audit-history
+
+Open (Kubernetes probes require it):
+
+* GET /health
+
+⸻
+
+Key Decisions
+
+* PyJWT for token signing and verification.
+* OAuth2PasswordBearer scheme - enables the Swagger UI Authorize button at /docs.
+* /token accepts OAuth2 password form data (requires python-multipart).
+* Router-level dependency - APIRouter(dependencies=[Depends(verify_token)]) protects all diagnostics routes in one line.
+* Constant-time credential comparison (secrets.compare_digest, both fields, no short-circuit) to prevent timing attacks.
+* Expiry lives INSIDE the token as the exp claim - no server-side timer, verified per request by jwt.decode().
+* Stateless verification - all 3 replicas share JWT_SECRET_KEY, any pod validates any token.
+
+⸻
+
+Secret Management Integration
+
+Infisical Cloud gained three new secrets:
+
+* API_USERNAME
+* API_PASSWORD
+* JWT_SECRET_KEY
+
+Flow unchanged:
+
+Infisical Cloud
+↓
+Kubernetes CD Workflow
+↓
+diagnostics-secret
+↓
+Pod Environment Variables
+
+Rotating JWT_SECRET_KEY in Infisical and rerunning CD instantly invalidates all outstanding tokens - the standard "log everyone out" lever.
+
+⸻
+
+Testing Strategy
+
+tests/conftest.py injects dummy credentials (testuser / testpass / test-secret-key) into os.environ before the app loads.
+
+Consequences:
+
+* pytest is fully self-contained on the GitHub-hosted runner.
+* No new GitHub secrets required for CI.
+* Real credentials never touch the test suite.
+
+New tests (11 total passing):
+
+* Token issuance success
+* Wrong password → 401
+* Missing token → 401
+* Garbage token → 401
+* Hand-crafted expired token → 401
+* /health open without token → 200
+
+⸻
+
+CI/CD Enhancements
+
+CI (ci.yml):
+
+* Docker build / login / tag / push steps enabled.
+* Build runs on pushes AND pull requests (Dockerfile validation).
+* Login / Tag / Push gated:
+  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+* Pull requests validate but never publish artifacts.
+
+CD (k8s-cd.yml):
+
+* New workflow_dispatch input: image_tag (git SHA from CI).
+* kubectl set image + rollout status when image_tag provided.
+* Infisical step retrieves the 3 new auth secrets.
+* Smoke test extended: unauthenticated POST /diagnostics must return 401 - proves authentication is live without credentials on the runner.
+
+⸻
+
+Documentation
+
+auth_guide.md created:
+
+* Token request commands and expiry inspection.
+* Secret update checklist (Infisical / GitHub / local).
+* Cluster + self-hosted runner bring-up steps.
+* Post-deployment verification flow.
+* Troubleshooting table.
+
+⸻
+
+Additional Concepts Learned
+
+✓ JWT Structure (header.payload.signature)
+✓ Opaque Tokens vs Self-Contained Tokens
+✓ OAuth2 Password Flow
+✓ Bearer Token Scheme (RFC 6750)
+✓ Token Expiry (exp claim)
+✓ Stateless Authentication
+✓ Constant-Time Comparison / Timing Attacks
+✓ Router-Level Dependencies (FastAPI)
+✓ Swagger UI Authorize Integration
+✓ CI Publish Gating (push vs pull_request)
+✓ kubectl set image / Rollout Status
+✓ Secret Rotation As Token Revocation
+
 
 
 Current Architecture
@@ -1281,6 +1419,20 @@ Infisical Cloud
 Kubernetes Secret
 ↓
 Sensitive Configuration
+(DB, SSH, API auth credentials, JWT signing key)
+
+Authentication:
+
+Client
+↓
+POST /token
+↓
+Bearer JWT (30 min)
+↓
+Protected Routes
+(/diagnostics, /audit-history)
+
+/health remains open for probes.
 
 Health:
 
@@ -1300,3 +1452,4 @@ Phase Status
 ✓ Phase 7 - Kubernetes
 ✓ Phase 7 - Kubernetes CD
 ✓ Phase 8 - Infisical Secret Management
+✓ Phase 9 - JWT Bearer Authentication
