@@ -14,7 +14,8 @@ client = TestClient(app)
     "app.routes.diagnostics.get_audit_history"
 )
 def test_audit_history(
-    mock_get_audit_history
+    mock_get_audit_history,
+    auth_headers
 ):
 
     mock_get_audit_history.return_value = [
@@ -28,7 +29,8 @@ def test_audit_history(
     ]
 
     response = client.get(
-        "/audit-history"
+        "/audit-history",
+        headers=auth_headers
     )
 
     assert response.status_code == 200

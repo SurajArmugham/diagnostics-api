@@ -69,6 +69,11 @@ name: Kubernetes CD
 
 on:
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image tag (git SHA pushed by CI). Leave empty to keep the tag pinned in k8s/deployment.yaml."
+        required: false
+        type: string
 
 jobs:
 
@@ -133,6 +138,9 @@ jobs:
       # - DB_PASSWORD
       # - SSH_USER
       # - SSH_PASSWORD
+      # - API_USERNAME
+      # - API_PASSWORD
+      # - JWT_SECRET_KEY
       #
       # Benefits:
       #
@@ -189,6 +197,9 @@ jobs:
           DB_PASSWORD=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="DB_PASSWORD") | .secretValue')
           SSH_USER=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="SSH_USER") | .secretValue')
           SSH_PASSWORD=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="SSH_PASSWORD") | .secretValue')
+          API_USERNAME=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="API_USERNAME") | .secretValue')
+          API_PASSWORD=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="API_PASSWORD") | .secretValue')
+          JWT_SECRET_KEY=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="JWT_SECRET_KEY") | .secretValue')
 
           echo "Updating Kubernetes Secret..."
 
@@ -197,6 +208,9 @@ jobs:
             --from-literal=DB_PASSWORD="$DB_PASSWORD" \
             --from-literal=SSH_USER="$SSH_USER" \
             --from-literal=SSH_PASSWORD="$SSH_PASSWORD" \
+            --from-literal=API_USERNAME="$API_USERNAME" \
+            --from-literal=API_PASSWORD="$API_PASSWORD" \
+            --from-literal=JWT_SECRET_KEY="$JWT_SECRET_KEY" \
             --dry-run=client \
             -o yaml | kubectl apply -f -
 
@@ -220,6 +234,38 @@ jobs:
       - name: Deploy Kubernetes Resources
         run: |
           kubectl apply -f k8s/
+
+      # ------------------------------------------------------
+      # Roll out a specific image version (optional).
+      #
+      # How to deploy a new image version:
+      #
+      # 1. Push to main → CI builds and pushes
+      #    surajarmugham/diagnostics-api:<git-sha>
+      #
+      # 2. Copy the full commit SHA from the CI run
+      #    (or locally: git rev-parse HEAD)
+      #    Example: 4acbb8b9e2f...
+      #
+      # 3. GitHub → Actions → "Kubernetes CD" →
+      #    Run workflow → image_tag = <that SHA>
+      #
+      # Leave image_tag empty to redeploy the SHA
+      # pinned in k8s/deployment.yaml.
+      #
+      # Drift Note:
+      # kubectl set image does NOT update the manifest.
+      # After a good deploy, update the pinned SHA in
+      # k8s/deployment.yaml so a later run without
+      # image_tag does not roll back to the old image.
+      # ------------------------------------------------------
+      - name: Set Image Tag
+        if: ${{ inputs.image_tag != '' }}
+        run: |
+          kubectl set image deployment/diagnostics-api \
+            diagnostics-api=surajarmugham/diagnostics-api:${{ inputs.image_tag }}
+
+          kubectl rollout status deployment/diagnostics-api --timeout=180s
 
       # ------------------------------------------------------
       # Allow time for Kubernetes to schedule Pods,
@@ -268,6 +314,11 @@ jobs:
       # FastAPI Application
       #
       # Health endpoint verifies application startup.
+      #
+      # Auth check verifies JWT protection is live:
+      # POST /diagnostics WITHOUT a token must return
+      # HTTP 401 - proves the API is secured without
+      # needing any credentials on the runner.
       # ------------------------------------------------------
       - name: Smoke Test Diagnostics API
         run: |
@@ -276,3 +327,17 @@ jobs:
           sleep 5
 
           curl http://localhost:8000/health
+
+          echo "Verifying authentication is enforced..."
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost:8000/diagnostics)
+
+          echo "Unauthenticated /diagnostics returned: $STATUS"
+
+          if [ "$STATUS" != "401" ]; then
+            echo "ERROR: Expected 401 for unauthenticated request."
+            exit 1
+          fi
+
+          echo "Authentication verified."

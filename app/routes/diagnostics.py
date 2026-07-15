@@ -1,11 +1,14 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.auth.dependencies import verify_token
 from app.models.diagnostics_request import DiagnosticsRequest
 from app.services.diagnostics_service import run_diagnostics
 from app.services.db_service import get_audit_history
 from app.utils.logger import logger
 
 
-router = APIRouter()
+# Router-level dependency: every route registered on this
+# router requires a valid JWT (Authorization: Bearer <jwt>).
+router = APIRouter(dependencies=[Depends(verify_token)])
 
 
 @router.post("/diagnostics")

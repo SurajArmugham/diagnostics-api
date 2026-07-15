@@ -8,7 +8,7 @@ client = TestClient(app)
 
 
 @patch("app.routes.diagnostics.run_diagnostics")
-def test_diagnostics(mock_run_diagnostics):
+def test_diagnostics(mock_run_diagnostics, auth_headers):
 
     mock_run_diagnostics.return_value = {
         "hostname": "ProBook.local",
@@ -22,7 +22,8 @@ def test_diagnostics(mock_run_diagnostics):
         json={
             "hostname": "Localhost",
             "service": "sshd"
-        }
+        },
+        headers=auth_headers
     )
 
     assert response.status_code == 200
