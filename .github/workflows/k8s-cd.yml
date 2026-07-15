@@ -69,11 +69,6 @@ name: Kubernetes CD
 
 on:
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Docker image tag (git SHA pushed by CI). Leave empty to keep the tag pinned in k8s/deployment.yaml."
-        required: false
-        type: string
 
 jobs:
 
@@ -231,49 +226,50 @@ jobs:
       # Kubernetes reconciliation loop will create or
       # update resources to match desired state.
       # ------------------------------------------------------
+      # ------------------------------------------------------
+      # GitOps Release Flow
+      #
+      # The image tag pinned in k8s/deployment.yaml is
+      # the single source of truth. This workflow never
+      # mutates images at runtime (no kubectl set image)
+      # so the cluster always mirrors Git exactly and
+      # a single rollout occurs per release.
+      #
+      # How to release a new image version:
+      #
+      # 1. Push code to main.
+      #    CI builds and pushes:
+      #    surajarmugham/diagnostics-api:<git-sha>
+      #
+      # 2. Verify the tag exists on Docker Hub.
+      #
+      # 3. Update the image tag pinned in
+      #    k8s/deployment.yaml (and
+      #    docker-compose.deploy.yml) to <git-sha>.
+      #
+      # 4. Commit with "[skip ci]" in the message so
+      #    the manifest-pin push does not rebuild the
+      #    image. Push to main.
+      #
+      # 5. GitHub → Actions → "Kubernetes CD" →
+      #    Run workflow.
+      # ------------------------------------------------------
       - name: Deploy Kubernetes Resources
         run: |
           kubectl apply -f k8s/
 
       # ------------------------------------------------------
-      # Roll out a specific image version (optional).
+      # Wait for the Deployment to converge on the
+      # desired state before verification.
       #
-      # How to deploy a new image version:
-      #
-      # 1. Push to main → CI builds and pushes
-      #    surajarmugham/diagnostics-api:<git-sha>
-      #
-      # 2. Copy the full commit SHA from the CI run
-      #    (or locally: git rev-parse HEAD)
-      #    Example: 4acbb8b9e2f...
-      #
-      # 3. GitHub → Actions → "Kubernetes CD" →
-      #    Run workflow → image_tag = <that SHA>
-      #
-      # Leave image_tag empty to redeploy the SHA
-      # pinned in k8s/deployment.yaml.
-      #
-      # Drift Note:
-      # kubectl set image does NOT update the manifest.
-      # After a good deploy, update the pinned SHA in
-      # k8s/deployment.yaml so a later run without
-      # image_tag does not roll back to the old image.
+      # rollout status blocks until all replicas are
+      # updated and available, or fails the workflow
+      # on timeout - catching image pull errors and
+      # crash loops early.
       # ------------------------------------------------------
-      - name: Set Image Tag
-        if: ${{ inputs.image_tag != '' }}
+      - name: Wait For Rollout
         run: |
-          kubectl set image deployment/diagnostics-api \
-            diagnostics-api=surajarmugham/diagnostics-api:${{ inputs.image_tag }}
-
           kubectl rollout status deployment/diagnostics-api --timeout=180s
-
-      # ------------------------------------------------------
-      # Allow time for Kubernetes to schedule Pods,
-      # pull images and complete startup.
-      # ------------------------------------------------------
-      - name: Wait For Pods
-        run: |
-          sleep 10
 
       # ------------------------------------------------------
       # Basic deployment verification.
