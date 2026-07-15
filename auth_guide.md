@@ -139,9 +139,17 @@ cd ~/github-runner/diagnostics-api-project/actions-runner && ./run.sh
 #    Leave it running. Verify it shows "Idle" under:
 #    GitHub → repo → Settings → Actions → Runners
 
-# 4. Run the "Kubernetes CD" workflow from GitHub Actions
-#    (image_tag = git SHA pushed by CI, or empty to use the
-#    SHA pinned in k8s/deployment.yaml).
+# 4. Release flow (GitOps - manifest is the source of truth):
+#    a. Push code to main -> CI builds + pushes image :<git-sha>
+#    b. Verify the tag on Docker Hub
+#    c. Pin <git-sha> in k8s/deployment.yaml (and
+#       docker-compose.deploy.yml), commit with "[skip ci]", push
+#    d. GitHub -> Actions -> "Kubernetes CD" -> Run workflow
+#       (no inputs; single kubectl apply deploys the pinned tag)
+#
+#    NOTE: "[skip ci]" anywhere in the head commit message skips
+#    push-triggered workflows - including in prose! Never write
+#    that token in a commit message unless you mean it.
 ```
 
 ### Full verification flow

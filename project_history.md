@@ -1342,12 +1342,18 @@ CI (ci.yml):
   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 * Pull requests validate but never publish artifacts.
 
-CD (k8s-cd.yml):
+CD (k8s-cd.yml) - GitOps single-apply design:
 
-* New workflow_dispatch input: image_tag (git SHA from CI).
-* kubectl set image + rollout status when image_tag provided.
-* Infisical step retrieves the 3 new auth secrets.
+* No runtime image mutation (no kubectl set image, no image_tag input).
+* The tag pinned in k8s/deployment.yaml is the single source of truth - each release is exactly one rollout and the cluster always mirrors Git.
+* Release flow: push code → CI pushes image :<git-sha> → verify on Docker Hub → pin <git-sha> in manifests → commit "[skip ci]" → push → run Kubernetes CD.
+* kubectl rollout status replaces fixed sleep (fails fast on image pull errors / crash loops).
+* Infisical step retrieves the 3 new auth secrets (7 total).
 * Smoke test extended: unauthenticated POST /diagnostics must return 401 - proves authentication is live without credentials on the runner.
+
+Lesson Learned (the hard way):
+
+GitHub skips push-triggered workflows when the head commit message contains "[skip ci]" ANYWHERE - including in descriptive prose. A commit message that merely documented the flow ("... commit [skip ci] -> run CD") silently suppressed the CI run. Diagnosis path: push event registered, workflows active, Actions operational, no run created → inspect the commit message. Fix: empty retrigger commit.
 
 ⸻
 
