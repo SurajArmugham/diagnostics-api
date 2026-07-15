@@ -57,7 +57,7 @@ services:
     # Re-enable dynamic image promotion using IMAGE_TAG from
     # the CI pipeline.
     # --------------------------------------------------------
-    image: surajarmugham/diagnostics-api:fb14bfe5f6842d417527ef5d072ec6a3c778bd05
+    image: surajarmugham/diagnostics-api:80ef790cfab4499c9739d091751107f4a773ac5f
     # Previous dynamic image configuration:
     # image: surajarmugham/diagnostics-api:${IMAGE_TAG}
 
