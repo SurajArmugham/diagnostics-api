@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 
 from app.auth.auth_service import decode_access_token
 from app.utils.logger import logger
+from app.utils.metrics import AUTH_FAILURES
 
 
 # ------------------------------------------------------------
@@ -43,6 +44,8 @@ def verify_token(token: str = Depends(oauth2_scheme)) -> dict:
     except jwt.InvalidTokenError:
 
         logger.warning("Rejected request with invalid or expired token")
+
+        AUTH_FAILURES.labels(reason="invalid_token").inc()
 
         raise HTTPException(
             status_code=401,

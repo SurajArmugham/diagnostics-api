@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from app.auth.auth_service import create_access_token, verify_credentials
 from app.utils.logger import logger
+from app.utils.metrics import AUTH_FAILURES, TOKENS_ISSUED
 
 
 router = APIRouter()
@@ -26,6 +27,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
         logger.warning("Failed login attempt")
 
+        AUTH_FAILURES.labels(reason="bad_credentials").inc()
+
         raise HTTPException(
             status_code=401,
             detail="Incorrect username or password",
@@ -33,6 +36,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
 
     logger.info(f"Token issued for {form_data.username}")
+
+    TOKENS_ISSUED.inc()
 
     return {
         "access_token": create_access_token(form_data.username),
