@@ -1391,7 +1391,7 @@ Phase 10 - Monitoring & Observability
 Roadmap:
 
 10.1 Structured JSON logging to stdout       ✓ SHIPPED
-10.2 /metrics endpoint (Prometheus client)
+10.2 /metrics endpoint (Prometheus client)   ✓ SHIPPED
 10.3 Prometheus deployment in-cluster
 10.4 Grafana dashboards + alerting
 10.5 Log aggregation (Loki hands-on + Splunk enterprise notes)
@@ -1480,6 +1480,85 @@ Additional Concepts Learned
 ✓ Rolling Updates vs Restart-To-Deploy
 ✓ Path-Specific Process Checks
 
+⸻
+
+Phase 10.2 - Prometheus /metrics Endpoint
+
+Objective
+
+Expose application metrics in Prometheus format so the metrics pillar becomes real: automatic request metrics for every endpoint, plus custom security counters that turn Phase 9's auth events into graphable numbers.
+
+⸻
+
+Implementation
+
+* prometheus-fastapi-instrumentator wired in run.py:
+  instrument(app) - middleware records RED metrics per request
+  (Rate, Errors, Duration):
+  http_requests_total{handler, method, status}
+  http_request_duration_seconds (histogram)
+  expose(app) - mounts GET /metrics (Prometheus text format).
+
+* Custom counters in app/utils/metrics.py:
+  tokens_issued_total
+  auth_failures_total{reason="bad_credentials" | "invalid_token"}
+  Incremented in routes/auth.py (login) and auth/dependencies.py (verify).
+
+* tests/test_metrics.py - endpoint open, RED metrics recorded,
+  every counter increments exactly once (suite: 19 tests).
+
+⸻
+
+Design Decisions
+
+* /metrics is OPEN (like /health): the industry standard. Prometheus
+  PULLS from inside the cluster; production restricts access by
+  NETWORK (NetworkPolicy / internal-only), not application auth.
+  Lab note: reachable via diagnostics.local/metrics through the
+  ingress catch-all - acceptable for learning, listed as a
+  production-hardening item.
+
+* Pull vs Push: the app stays passive - no metrics pipeline in app
+  code. A dead app is DETECTED because the scrape fails (up == 0),
+  which is itself an alertable signal.
+
+* Counter semantics: counters only increase (reset on pod restart).
+  PromQL rate() converts them to per-second rates:
+  rate(auth_failures_total[5m])
+
+* Label cardinality: every distinct label value creates a new time
+  series. Labels must be small bounded sets (reason has 2 values).
+  Never usernames, IPs, or request IDs.
+
+⸻
+
+Verified In Production (and a live lesson)
+
+curl -sk https://diagnostics.local/metrics after generating traffic:
+
+tokens_issued_total 0.0
+auth_failures_total{reason="invalid_token"} 1.0
+http_requests_total{handler="/health",...} 45.0    ← kubelet probes, now measurable
+
+The test traffic was load-balanced across 3 replicas - the scraped pod
+showed invalid_token=1 but NOT the bad_credentials hit (it landed on a
+sibling pod). Each replica counts only its own traffic: THIS is why
+Prometheus scrapes every pod individually and aggregates with
+
+sum(rate(auth_failures_total[5m]))
+
+⸻
+
+Additional Concepts Learned
+
+✓ RED Method (Rate, Errors, Duration)
+✓ Pull vs Push Metrics Models
+✓ Prometheus Text Exposition Format
+✓ Counter vs Gauge vs Histogram
+✓ Label Cardinality Discipline
+✓ Per-Replica Counters → PromQL sum()
+✓ Open Metrics Endpoint + Network Restriction Pattern
+
 
 
 Current Architecture
@@ -1556,3 +1635,4 @@ Phase Status
 ✓ Phase 8 - Infisical Secret Management
 ✓ Phase 9 - JWT Bearer Authentication
 ✓ Phase 10.1 - Structured JSON Logging
+✓ Phase 10.2 - Prometheus /metrics Endpoint
