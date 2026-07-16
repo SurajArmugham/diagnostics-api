@@ -71,7 +71,7 @@ spec:
           # Docker image built by GitHub Actions CI.
           # Commit SHA tag provides immutable versioning.
           # --------------------------------------------
-          image: surajarmugham/diagnostics-api:72d6d449841a282dbbc68ef5e40d65984c605057
+          image: surajarmugham/diagnostics-api:036354e9c3ee587adebf372366b907cac39c2475
 
           # --------------------------------------------
           # Application listens on port 8000.
