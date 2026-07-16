@@ -1384,6 +1384,102 @@ Additional Concepts Learned
 ✓ kubectl set image / Rollout Status
 ✓ Secret Rotation As Token Revocation
 
+⸻
+
+Phase 10 - Monitoring & Observability
+
+Roadmap:
+
+10.1 Structured JSON logging to stdout       ✓ SHIPPED
+10.2 /metrics endpoint (Prometheus client)
+10.3 Prometheus deployment in-cluster
+10.4 Grafana dashboards + alerting
+10.5 Log aggregation (Loki hands-on + Splunk enterprise notes)
+
+⸻
+
+Phase 10.1 - Structured JSON Logging to stdout
+
+Objective
+
+Make application logs COLLECTABLE (stdout) and QUERYABLE (JSON). Previously the app wrote plain-text logs to logs/app.log inside the container - invisible to kubectl logs, invisible to any log collector, and lost on every pod restart.
+
+⸻
+
+The Kubernetes Log Pipeline
+
+app stdout
+↓
+container runtime
+↓
+/var/log/containers/*.log   (on the node)
+↓
+collector DaemonSet (Alloy / Splunk forwarder / promtail)
+↓
+Loki / Splunk
+
+A file inside the pod sits OFF this conveyor belt. Writing to stdout is the contract with the platform (12-Factor App, factor XI: an app never routes or stores its own log stream).
+
+⸻
+
+Implementation
+
+app/utils/logger.py rewritten:
+
+* JsonFormatter - stdlib-only logging.Formatter subclass (~20 lines: override format(), return json.dumps). This is what python-json-logger does under the hood.
+* Each line: timestamp (UTC ISO-8601), level, logger, message.
+* extra={...} fields at the call site are promoted to top-level JSON keys.
+* exc_info tracebacks captured under an "exception" key.
+* NAMED logger ("diagnostics_api") with propagate=False - NOT basicConfig, which configures the ROOT logger and captures every library's propagated records into your format.
+* Call sites unchanged (5 modules import the same logger object).
+
+tests/test_logger.py: valid-JSON, extra-fields, exception-capture (suite: 14 tests).
+
+⸻
+
+Why JSON At The Source
+
+Plain:  2026-07-16 10:32:01 WARNING Failed login attempt
+JSON:   {"level": "WARNING", "message": "Failed login attempt", ...}
+
+Plain text forces Splunk/Loki to regex-guess fields out of prose - brittle, breaks when wording changes. JSON makes every key an instantly searchable field:
+
+level=WARNING | stats count by client_ip
+
+⸻
+
+Release Process Lessons
+
+* Released via the canonical GitOps runbook: push → CI image → verify Docker Hub → pin sha in manifests → [skip ci] push → manual CD.
+* ROLLING UPDATE, not restart: the release deployed to the LIVE cluster. New pods passed readiness probes before old pods terminated (pod AGE stagger: 2m42s / 2m14s / 2m02s). Never stop a cluster to deploy - that is the pre-Kubernetes mental model.
+* Runner preflight must be PATH-SPECIFIC: a generic pgrep for Runner.Listener false-positived on a second runner install (incident-project). Check the full install path.
+
+⸻
+
+Verification (payoff)
+
+kubectl logs -l app=diagnostics-api now shows the app's own events:
+
+{"timestamp": "2026-07-16T16:53:15.526399+00:00", "level": "WARNING", "logger": "diagnostics_api", "message": "Failed login attempt"}
+
+Observed along the way:
+
+* Kubelet probe traffic (INFO "Health endpoint called" every 5s per pod) - previously invisible.
+* kubectl logs -l defaults to --tail=10 per pod - grepping tails does not scale; THIS is the problem log aggregation (10.5) solves.
+
+⸻
+
+Additional Concepts Learned
+
+✓ Three Pillars (Metrics / Logs / Traces)
+✓ 12-Factor Logging (Factor XI)
+✓ Kubernetes Log Pipeline (stdout → node files → DaemonSet collector)
+✓ Structured Logging / Fields vs Regex Extraction
+✓ Named Logger vs Root basicConfig
+✓ Logger Propagation
+✓ Rolling Updates vs Restart-To-Deploy
+✓ Path-Specific Process Checks
+
 
 
 Current Architecture
@@ -1459,3 +1555,4 @@ Phase Status
 ✓ Phase 7 - Kubernetes CD
 ✓ Phase 8 - Infisical Secret Management
 ✓ Phase 9 - JWT Bearer Authentication
+✓ Phase 10.1 - Structured JSON Logging
