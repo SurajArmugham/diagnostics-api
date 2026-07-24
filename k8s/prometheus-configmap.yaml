@@ -1,0 +1,94 @@
+# ------------------------------------------------------------
+# Prometheus Scrape Configuration
+#
+# Mounted into the Prometheus pod as
+# /etc/prometheus/prometheus.yml
+#
+# Two jobs:
+# 1. prometheus       - Prometheus scrapes ITSELF
+#                       (standard practice: monitor the
+#                       monitoring system).
+# 2. kubernetes-pods  - discovers every pod in the
+#                       cluster via the Kubernetes API,
+#                       then KEEPS only pods annotated:
+#                       prometheus.io/scrape: "true"
+#
+# Annotation contract (see k8s/deployment.yaml):
+# prometheus.io/scrape: "true"    opt in
+# prometheus.io/port:   "8000"    where to pull
+# prometheus.io/path:   "/metrics" what to pull
+#
+# relabel_configs (interview essential):
+# Rules applied BEFORE scraping that shape WHAT gets
+# scraped. Discovery hands Prometheus raw metadata
+# (__meta_kubernetes_*); relabeling turns it into
+# target address, metrics path, and readable labels.
+# "keep" drops every target that does not match -
+# this is how opt-in scraping works.
+# ------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      # Pull every target each 15 seconds.
+      scrape_interval: 15s
+
+    scrape_configs:
+
+      # ------------------------------------------------
+      # Job 1: Prometheus monitors itself.
+      # ------------------------------------------------
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # ------------------------------------------------
+      # Job 2: Annotation-based pod discovery.
+      # ------------------------------------------------
+      - job_name: kubernetes-pods
+
+        kubernetes_sd_configs:
+          - role: pod
+
+        relabel_configs:
+
+          # Opt-in: keep ONLY pods annotated
+          # prometheus.io/scrape: "true"
+          - source_labels:
+              - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+            action: keep
+            regex: "true"
+
+          # Scrape path from prometheus.io/path
+          # (defaults to /metrics when absent).
+          - source_labels:
+              - __meta_kubernetes_pod_annotation_prometheus_io_path
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+
+          # Target address = pod IP + prometheus.io/port
+          - source_labels:
+              - __address__
+              - __meta_kubernetes_pod_annotation_prometheus_io_port
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+          # Readable labels on every stored series:
+          # namespace and pod name - this is how the
+          # 3 replicas stay distinguishable.
+          - source_labels:
+              - __meta_kubernetes_namespace
+            action: replace
+            target_label: namespace
+
+          - source_labels:
+              - __meta_kubernetes_pod_name
+            action: replace
+            target_label: pod

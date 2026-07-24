@@ -58,6 +58,23 @@ spec:
       labels:
         app: diagnostics-api
 
+      # ------------------------------------------------
+      # Prometheus Scrape Annotations
+      #
+      # Prometheus discovers pods through the
+      # Kubernetes API (kubernetes_sd_configs) and
+      # keeps only pods carrying these annotations
+      # (see k8s/prometheus-configmap.yaml).
+      #
+      # Each of the 3 replicas is scraped
+      # INDIVIDUALLY every 15s - per-pod counters
+      # are aggregated later with PromQL sum().
+      # ------------------------------------------------
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+
     spec:
 
       containers:

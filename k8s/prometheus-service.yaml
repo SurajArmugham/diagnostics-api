@@ -1,0 +1,29 @@
+# ------------------------------------------------------------
+# Prometheus Service
+#
+# ClusterIP - reachable INSIDE the cluster only:
+# - Grafana (next milestone) will use
+#   http://prometheus.monitoring.svc.cluster.local:9090
+#   as its datasource URL.
+# - Operator access is port-forward ON DEMAND
+#   (torn down after use - see CLAUDE.md cleanup):
+#   kubectl port-forward -n monitoring svc/prometheus 9090:9090
+#
+# No ingress on purpose: the Prometheus UI is an
+# operator tool, not a public surface.
+# ------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: prometheus
+
+  ports:
+    - port: 9090
+      targetPort: 9090

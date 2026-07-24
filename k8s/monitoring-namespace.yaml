@@ -1,0 +1,27 @@
+# ------------------------------------------------------------
+# Monitoring Namespace
+#
+# Purpose:
+# Isolate observability tooling (Prometheus now,
+# Grafana in the next milestone) from application
+# workloads in the default namespace.
+#
+# Enterprise Pattern:
+# Namespaces separate blast radius, access control
+# (RBAC can be scoped per namespace), and resource
+# quotas. Application teams and platform/monitoring
+# teams typically own different namespaces.
+#
+# First non-default namespace in this project:
+# kubectl get pods -n monitoring
+#
+# Note On File Naming:
+# kubectl apply -f k8s/ processes files in
+# ALPHABETICAL order - "monitoring-namespace.yaml"
+# sorts before "prometheus-*.yaml", so the namespace
+# exists before resources are created inside it.
+# ------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring

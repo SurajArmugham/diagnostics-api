@@ -1,0 +1,55 @@
+# ------------------------------------------------------------
+# Prometheus RBAC
+#
+# Why Prometheus needs Kubernetes permissions:
+# Prometheus does not receive metrics - it PULLS them.
+# To know WHERE to pull from, it asks the Kubernetes
+# API "which pods exist right now?" (service discovery,
+# kubernetes_sd_configs). Pods come and go with every
+# rolling update - static target lists would rot
+# immediately; discovery keeps targets current.
+#
+# Chain:
+# ServiceAccount  - identity the Prometheus pod runs as
+# ClusterRole     - READ-ONLY verbs on discovery objects
+# ClusterRoleBinding - connects the two
+#
+# Least Privilege:
+# get/list/watch ONLY - Prometheus can look, never touch.
+# ClusterRole (not Role) because the API pods live in
+# the DEFAULT namespace while Prometheus runs in
+# MONITORING - discovery must cross namespaces.
+# ------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
