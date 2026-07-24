@@ -1392,7 +1392,7 @@ Roadmap:
 
 10.1 Structured JSON logging to stdout       ✓ SHIPPED
 10.2 /metrics endpoint (Prometheus client)   ✓ SHIPPED
-10.3 Prometheus deployment in-cluster
+10.3 Prometheus deployment in-cluster        ✓ SHIPPED
 10.4 Grafana dashboards + alerting
 10.5 Log aggregation (Loki hands-on + Splunk enterprise notes)
 
@@ -1559,6 +1559,98 @@ Additional Concepts Learned
 ✓ Per-Replica Counters → PromQL sum()
 ✓ Open Metrics Endpoint + Network Restriction Pattern
 
+⸻
+
+Phase 10.3 - In-Cluster Prometheus
+
+Objective
+
+Deploy Prometheus INTO the cluster so the metrics exposed in 10.2 gain the three
+dimensions a browser scrape lacks: ALL pods, OVER time, QUERYABLE.
+
+⸻
+
+Architecture
+
+Prometheus (monitoring namespace)
+↓
+Kubernetes API
+(service discovery: "which pods exist?")
+↓
+keep pods annotated prometheus.io/scrape="true"
+↓
+scrape each of the 3 API pods INDIVIDUALLY every 15s
+↓
+TSDB (time-series database, 7d retention)
+↓
+PromQL queries
+
+⸻
+
+Manifests (all in k8s/, deployed by the same kubectl apply -f k8s/)
+
+* monitoring-namespace.yaml - first non-default namespace: observability tooling
+  isolated from application workloads (blast radius, per-namespace RBAC/quotas).
+* prometheus-rbac.yaml - ServiceAccount + ClusterRole (get/list/watch on
+  pods/services/endpoints/nodes) + binding. Least privilege: Prometheus can look,
+  never touch. ClusterRole because discovery crosses namespaces.
+* prometheus-configmap.yaml - prometheus.yml: 15s scrape interval; self-scrape job;
+  kubernetes_sd_configs (role: pod) + relabel_configs implementing the annotation
+  contract: keep only prometheus.io/scrape="true", address from pod IP +
+  prometheus.io/port, path from prometheus.io/path, namespace/pod labels attached
+  to every stored series.
+* prometheus-deployment.yaml - prom/prometheus:v3.13.1 (pinned), emptyDir TSDB
+  (history dies with the pod - deliberate lab tradeoff; production: PVC + Thanos/
+  Mimir for long-term storage), /-/ready and /-/healthy probes, resource limits.
+* prometheus-service.yaml - ClusterIP only: Grafana (10.4) will consume
+  http://prometheus.monitoring.svc.cluster.local:9090; operator UI access is
+  port-forward ON DEMAND, torn down after use.
+* deployment.yaml - the 3 scrape annotations on the API pod template.
+
+⸻
+
+Release Note
+
+Manifests-only change → committed [skip ci] (no image rebuild; deployment stays
+pinned to 036354e). The SAME CD workflow deployed the whole monitoring stack -
+GitOps means new infrastructure is just new files in k8s/.
+
+⸻
+
+Verified In Production
+
+Targets (via Kubernetes API-server proxy - read-only, no port-forward needed):
+
+kubernetes-pods   http://10.244.0.10:8000/metrics   health=up
+kubernetes-pods   http://10.244.0.12:8000/metrics   health=up
+kubernetes-pods   http://10.244.0.13:8000/metrics   health=up
+prometheus        http://localhost:9090/metrics     health=up
+
+First PromQL - the 10.2 per-replica lesson, resolved:
+
+sum by (pod) (http_requests_total{handler="/health"})
+→ 54 + 56 + 51
+sum(http_requests_total{handler="/health"})
+→ 161
+
+Access paths:
+
+kubectl port-forward -n monitoring svc/prometheus 9090:9090   (UI, on demand)
+kubectl get --raw "/api/v1/namespaces/monitoring/services/prometheus:9090/proxy/api/v1/query?query=..."   (read-only, no cleanup)
+
+⸻
+
+Additional Concepts Learned
+
+✓ Kubernetes Service Discovery (kubernetes_sd_configs)
+✓ relabel_configs / Annotation-Based Opt-In Scraping
+✓ Namespace Isolation
+✓ RBAC For Non-Human Identities (ServiceAccount)
+✓ TSDB + Retention
+✓ PromQL sum() / sum by ()
+✓ API-Server Proxy As Read-Only Access Path
+✓ Monitoring The Monitor (self-scrape)
+
 
 
 Current Architecture
@@ -1636,3 +1728,4 @@ Phase Status
 ✓ Phase 9 - JWT Bearer Authentication
 ✓ Phase 10.1 - Structured JSON Logging
 ✓ Phase 10.2 - Prometheus /metrics Endpoint
+✓ Phase 10.3 - In-Cluster Prometheus
