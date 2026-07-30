@@ -136,6 +136,7 @@ jobs:
       # - API_USERNAME
       # - API_PASSWORD
       # - JWT_SECRET_KEY
+      # - GRAFANA_CLOUD_API_KEY (monitoring namespace)
       #
       # Benefits:
       #
@@ -195,6 +196,7 @@ jobs:
           API_USERNAME=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="API_USERNAME") | .secretValue')
           API_PASSWORD=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="API_PASSWORD") | .secretValue')
           JWT_SECRET_KEY=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="JWT_SECRET_KEY") | .secretValue')
+          GRAFANA_CLOUD_API_KEY=$(echo "$SECRET_RESPONSE" | jq -r '.secrets[] | select(.secretKey=="GRAFANA_CLOUD_API_KEY") | .secretValue')
 
           echo "Updating Kubernetes Secret..."
 
@@ -210,6 +212,32 @@ jobs:
             -o yaml | kubectl apply -f -
 
           echo "Kubernetes Secret updated successfully."
+
+          # ------------------------------------------------
+          # Grafana Cloud remote_write credential.
+          #
+          # Separate secret, in the MONITORING namespace:
+          # secrets are namespace-scoped and a pod can only
+          # mount secrets from its OWN namespace - the
+          # consumer here is the Prometheus pod.
+          #
+          # Namespace guard: this step runs BEFORE
+          # kubectl apply -f k8s/ (which creates the
+          # monitoring namespace on a fresh cluster), so
+          # ensure it exists idempotently first.
+          # ------------------------------------------------
+          echo "Updating Grafana Cloud Secret..."
+
+          kubectl create namespace monitoring \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic grafana-cloud \
+            --namespace=monitoring \
+            --from-literal=api-key="$GRAFANA_CLOUD_API_KEY" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+          echo "Grafana Cloud Secret updated successfully."
 
       # ------------------------------------------------------
       # Deploy all Kubernetes manifests.

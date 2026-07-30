@@ -37,6 +37,45 @@ data:
       # Pull every target each 15 seconds.
       scrape_interval: 15s
 
+    # ------------------------------------------------
+    # remote_write - ship a FILTERED copy of samples
+    # to Grafana Cloud (hosted Mimir).
+    #
+    # Security model:
+    # OUTBOUND HTTPS push only - nothing on this
+    # cluster is exposed to the internet. Samples are
+    # batched (~every few seconds) and buffered in the
+    # WAL: network outage -> buffer + retry, no loss;
+    # cluster stopped -> data never collected (gap).
+    #
+    # Credentials:
+    # url + username are IDENTIFIERS (safe in git);
+    # the API token is the credential - read from a
+    # file mounted from the grafana-cloud Secret
+    # (Infisical -> CD -> Secret -> file). Never in git.
+    # The token is WRITE-ONLY (MetricsPublisher).
+    #
+    # write_relabel_configs - the ALLOWLIST:
+    # applies to the OUTBOUND stream only; the local
+    # TSDB keeps everything. Ships 46 of 1023 series
+    # (traffic, timing, pod-aliveness) - remote storage
+    # is billed per series, so ship only what cloud
+    # dashboards/alerts use. NOT shipped: prometheus_*/
+    # go_* self-monitoring, the duplicate highr
+    # histogram, python/process runtime, auth counters
+    # (local-only by choice - cloud alerting uses
+    # /token 4xx traffic instead).
+    # ------------------------------------------------
+    remote_write:
+      - url: "https://prometheus-prod-68-prod-eu-west-6.grafana.net/api/prom/push"
+        basic_auth:
+          username: "3411296"
+          password_file: /etc/prometheus/secrets/api-key
+        write_relabel_configs:
+          - source_labels: [__name__]
+            action: keep
+            regex: http_requests_total|http_request_duration_seconds_(bucket|count|sum)|up
+
     scrape_configs:
 
       # ------------------------------------------------

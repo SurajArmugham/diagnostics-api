@@ -88,6 +88,13 @@ spec:
               mountPath: /etc/prometheus
             - name: data
               mountPath: /prometheus
+            # Grafana Cloud API token as a FILE -
+            # referenced by remote_write.password_file.
+            # File mounts never appear in kubectl
+            # describe output (unlike env vars).
+            - name: grafana-cloud
+              mountPath: /etc/prometheus/secrets
+              readOnly: true
 
       volumes:
 
@@ -99,3 +106,9 @@ spec:
         # Ephemeral TSDB storage (see header note).
         - name: data
           emptyDir: {}
+
+        # Created by the CD workflow from Infisical
+        # (grafana-cloud Secret, monitoring namespace).
+        - name: grafana-cloud
+          secret:
+            secretName: grafana-cloud
