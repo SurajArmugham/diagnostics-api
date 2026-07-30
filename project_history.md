@@ -1393,7 +1393,7 @@ Roadmap:
 10.1 Structured JSON logging to stdout       ✓ SHIPPED
 10.2 /metrics endpoint (Prometheus client)   ✓ SHIPPED
 10.3 Prometheus deployment in-cluster        ✓ SHIPPED
-10.4 Grafana dashboards + alerting
+10.4 Grafana Cloud dashboards + alerting     ✓ SHIPPED
 10.5 Log aggregation (Loki hands-on + Splunk enterprise notes)
 
 ⸻
@@ -1651,6 +1651,161 @@ Additional Concepts Learned
 ✓ API-Server Proxy As Read-Only Access Path
 ✓ Monitoring The Monitor (self-scrape)
 
+⸻
+
+Phase 10.4 - Grafana Cloud (dashboards + alerting)
+
+Objective
+
+Complete the metrics pillar with a display and alerting layer - and do it the way
+an application/SRE team actually does it in a company: the PLATFORM is already
+provided, the app team brings instrumentation, dashboards and alert rules.
+
+⸻
+
+Why Grafana Cloud Instead Of Self-Hosting
+
+Deploying Grafana is platform-team work. In most companies a Grafana instance
+already exists behind SSO at grafana.company.com. The app team's contract is:
+
+1. Instrument the app        (10.2 - /metrics)
+2. Opt in to scraping        (10.3 - pod annotations)
+3. Build dashboards + alerts (10.4 - this phase)
+
+Grafana Cloud free tier plays the platform team: hosted Grafana + hosted Mimir
+(metrics store) + hosted alerting, no card required.
+
+⸻
+
+Architecture - remote_write
+
+app /metrics
+↓  (local scrape, 15s)
+Prometheus (monitoring namespace)
+↓  OUTBOUND HTTPS push, batched every few seconds
+Grafana Cloud Mimir  (surajarmugham.grafana.net, eu-west-6, tenant 3411296)
+↓
+Grafana Cloud UI (dashboard + alert evaluation)
+
+Security model (the reason this is safe on a laptop):
+remote_write is OUTBOUND ONLY - exactly like pushing an image to Docker Hub.
+Nothing on the cluster is exposed to the internet, no inbound port, no tunnel.
+Only metric samples leave (names, labels, numbers) - no logs, no credentials.
+The API token (write-only, MetricsPublisher) lives in Infisical -> CD ->
+grafana-cloud Secret (monitoring namespace) -> mounted as a FILE ->
+remote_write.password_file. URL and tenant ID are identifiers, not secrets, and
+sit in the ConfigMap in git.
+
+⸻
+
+Cardinality Control - The Allowlist
+
+Live inventory before shipping: 1023 active series
+  789  Prometheus self-monitoring (prometheus_*, go_*) - useless in the cloud
+  234  from the API pods, of which most is runtime noise
+        (python_gc_*, process_*, a DUPLICATE high-resolution histogram,
+         *_created timestamp twins)
+
+write_relabel_configs keep-regex ships only what dashboards/alerts use:
+  http_requests_total | http_request_duration_seconds_(bucket|count|sum) | up
+  = 46 of 1023 series (~0.5% of the free tier limit)
+
+Key property: the filter applies to the OUTBOUND stream only. The local TSDB
+still stores everything for 7 days. Remote storage is billed per series, so
+enterprises allowlist aggressively - and the allowlist DEFINES the remote
+dashboard/alert surface (an auth-failure alert became impossible in the cloud
+because those counters were deliberately kept local).
+
+⸻
+
+Dashboard
+
+Panel "API Pods Up" - Stat visualization
+  query:      sum(up{job="kubernetes-pods"})
+  calculation: Last * (status tiles want NOW, not the window average)
+  thresholds:  base dark-red / green at 3, colorMode background
+
+Proven live by scaling the Deployment to 2 replicas: tile went green 3 -> red 2
+-> green 3 in ~25 seconds end to end (scrape <=15s + remote_write batch ~5s +
+dashboard refresh 10s).
+
+Lessons from that test:
+
+* kubectl delete pod is a POOR test - the Deployment self-heals in ~5s, likely
+  between scrapes. Scaling is a durable desired-state change.
+* SERIES VANISH, they do not report zero. A removed pod's `up` series goes stale
+  and disappears - which is why the query is sum(up) (drops in BOTH cases) and
+  not up == 0 (which would have stayed silent through the whole outage).
+* Imperative vs declarative: kubectl scale created drift from git; the honest
+  restore was kubectl apply -f k8s/deployment.yaml (output said "configured" -
+  Kubernetes reconciled desired vs actual).
+
+⸻
+
+Alert Rule - ApiPodsDown
+
+  query:           sum(up{job="kubernetes-pods"})   (identical to the panel,
+                   created FROM the panel so they cannot drift apart)
+  condition:       IS BELOW 3
+  evaluation:      every 1m
+  pending period:  2m
+  no data:         ALERTING
+  contact point:   email
+
+Lifecycle observed end to end:
+Normal -> Pending (condition true at first evaluation) -> Firing (after 2m
+pending) -> email -> [kubectl apply restore] -> Normal -> resolved email.
+
+Design decisions worth defending in an interview:
+
+* Pending period exists to ride out rolling updates. Without it every release
+  would page the on-call. Slow to alarm, quick to forgive: recovery has NO
+  pending period - the first false evaluation resolves it.
+* No Data -> Alerting is correct for an AVAILABILITY metric: if every pod dies
+  or Prometheus itself stops, the series disappears and the query returns
+  nothing. Silence IS the emergency. For a traffic counter the opposite choice
+  is right (no data just means quiet). Same knob, opposite answer, decided by
+  what the metric MEANS.
+* Notification throttling: one email per firing, not per evaluation.
+  Group wait (~30s) / group interval (~5m) / repeat interval (~4h) are the
+  anti-alert-fatigue dials.
+
+⸻
+
+Operational Consequence - Planned Downtime
+
+Stopping Docker Desktop kills Prometheus -> remote_write stops -> after the ~5m
+query lookback the rule sees No Data -> fires ~5-7 min after shutdown, repeating
+~4-hourly. This is the planned-maintenance problem every ops team has.
+
+Options and their failure modes:
+  Pause evaluation - manual on, manual off. If forgotten the alert is DEAD.
+                     Fails UNSAFE, but correct for multi-day shutdowns.
+  Silence          - time-boxed, auto-expires. Fails SAFE.
+  Mute timing      - recurring window, set once. Fails SAFE; rule still
+                     evaluates, only notifications are suppressed.
+
+This project uses PAUSE (laptop is off for days, so a silence would expire and
+alert anyway) - with unpausing written into the COLD-START runbook, because a
+paused alert is a dead alert.
+
+⸻
+
+Additional Concepts Learned
+
+✓ Platform Team vs Application Team Split
+✓ remote_write (Push To Central Store)
+✓ WAL (Write-Ahead Log) - Crash Recovery + remote_write Buffer
+✓ Transport Failure vs Collection Failure (backfill vs permanent gap)
+✓ Cardinality / Cost Control With write_relabel_configs
+✓ Hosted Mimir, Multi-Tenancy By Instance ID
+✓ Stat Panel Semantics (Last vs Mean, thresholds, base colour)
+✓ Alert Lifecycle: Normal / Pending / Firing / Resolved
+✓ Pending Period As Flap Protection
+✓ No-Data Handling As An Intent Decision
+✓ Notification Grouping, Repeat Interval, Alert Fatigue
+✓ Silences, Mute Timings, Paused Rules (planned maintenance)
+
 
 
 Current Architecture
@@ -1729,3 +1884,4 @@ Phase Status
 ✓ Phase 10.1 - Structured JSON Logging
 ✓ Phase 10.2 - Prometheus /metrics Endpoint
 ✓ Phase 10.3 - In-Cluster Prometheus
+✓ Phase 10.4 - Grafana Cloud Dashboards + Alerting

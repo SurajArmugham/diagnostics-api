@@ -136,6 +136,10 @@ TLS	OpenSSL
 Storage	PVC / PV
 Secret Management	Infisical Cloud
 Authentication	JWT (PyJWT, OAuth2 Password Flow)
+Logging	Structured JSON to stdout (stdlib)
+Metrics	Prometheus + prometheus-fastapi-instrumentator
+Metrics Backend	Grafana Cloud (hosted Mimir) via remote_write
+Dashboards / Alerting	Grafana Cloud
 
 ⸻
 
@@ -473,6 +477,21 @@ Implemented and validated:
 * Constant-Time Comparison
 * Swagger UI Authorize
 * CI Publish Gating (push vs pull_request)
+* Structured Logging (12-Factor, stdout)
+* Kubernetes Log Pipeline
+* RED Method (Rate, Errors, Duration)
+* Pull vs Push Metrics Models
+* Counter / Gauge / Histogram
+* Label Cardinality Discipline
+* Prometheus Service Discovery + relabel_configs
+* PromQL (rate, sum by, histogram_quantile)
+* TSDB Retention + WAL
+* remote_write To Hosted Mimir
+* Cardinality / Cost Control (write_relabel_configs allowlist)
+* Alert Lifecycle (Normal / Pending / Firing / Resolved)
+* Pending Period As Flap Protection
+* No-Data Handling As An Intent Decision
+* Alert Fatigue (grouping, repeat interval, silences)
 
 ⸻
 
@@ -523,6 +542,9 @@ Secrets Delivered:
 * SSH_USER / SSH_PASSWORD
 * API_USERNAME / API_PASSWORD
 * JWT_SECRET_KEY
+* GRAFANA_CLOUD_API_KEY (delivered to the monitoring namespace as the
+  grafana-cloud Secret - secrets are namespace-scoped, so the consumer
+  decides where they live)
 
 Benefits:
 
