@@ -120,6 +120,56 @@ auth_guide.md
 
 ⸻
 
+Observability
+
+Metrics pipeline from the application to a hosted dashboard.
+
+Flow:
+
+FastAPI pods (×3)
+ ↓  expose /metrics
+Prometheus (monitoring namespace)
+ ↓  PULL - scrapes every pod individually, every 15s
+Local TSDB (7 day retention)
+ ↓  remote_write - PUSH, outbound HTTPS only, filtered allowlist
+Grafana Cloud (hosted Mimir)
+ ↓
+Dashboard panel + alert rule
+
+Application metrics:
+
+* http_requests_total{handler, method, status}       (RED - rate + errors)
+* http_request_duration_seconds_*                    (RED - duration histogram)
+* tokens_issued_total                                (custom)
+* auth_failures_total{reason}                        (custom)
+
+Target discovery:
+
+Pods opt in with three annotations
+(prometheus.io/scrape, prometheus.io/port, prometheus.io/path).
+Prometheus discovers them through the Kubernetes API - no static
+target lists to maintain.
+
+Cost control:
+
+A write_relabel_configs allowlist ships 46 of 1023 series to the
+hosted backend (dashboard and alert series only). The local TSDB
+still stores everything for debugging.
+
+Alerting:
+
+ApiPodsDown - sum(up{job="kubernetes-pods"}) IS BELOW 3,
+evaluated every 1m, 2m pending period, email contact point.
+The pending period rides out rolling updates so releases do not
+page anyone.
+
+Logs:
+
+Structured JSON to stdout, collected by the Kubernetes log pipeline
+(kubectl logs). Aggregation to Loki is the next milestone.
+
+⸻
+
 Technology Stack
 
 Component	Technology
@@ -497,16 +547,21 @@ Implemented and validated:
 
 Future Enhancements
 
+Delivered:
+
+* Rolling Updates (zero-downtime releases gated by readiness probes)
+* Structured JSON Logging
+* Prometheus Metrics + In-Cluster Prometheus
+* Grafana Cloud Dashboards + Alerting
+
 Planned:
 
-* Rolling Updates
+* Log Aggregation (Loki; Splunk / ELK comparison notes)
+* Distributed Tracing (OpenTelemetry)
 * Rollbacks
 * Horizontal Pod Autoscaler (HPA)
-* Monitoring
-* Alerting
 * Advanced Troubleshooting Scenarios
-* Prometheus
-* Grafana
+* Persistent Prometheus Storage (PVC) + Long-Term Retention (Thanos / Mimir)
 * cert-manager
 * External Secrets Operator
 * Secret Rotation Automation

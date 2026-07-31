@@ -1786,8 +1786,40 @@ Options and their failure modes:
                      evaluates, only notifications are suppressed.
 
 This project uses PAUSE (laptop is off for days, so a silence would expire and
-alert anyway) - with unpausing written into the COLD-START runbook, because a
+alert anyway) - with unpausing written into the bring-up runbook, because a
 paused alert is a dead alert.
+
+⸻
+
+Operational Lesson - Restart Is Not Reset
+
+Quitting Docker Desktop does NOT reset the Kubernetes cluster. Cluster state
+(deployments, secrets, ConfigMaps, the ingress controller) lives in etcd on the
+VM disk and survives; pods return automatically on restart. Only a deliberate
+Docker Desktop -> Settings -> Kubernetes -> Reset wipes etcd.
+
+The runbook was originally written as one "COLD-START" procedure covering both,
+which caused reset-only steps (re-applying the TLS secret, reinstalling the
+ingress controller) to be prescribed after an ordinary restart. It is now split
+into three explicitly named scenarios:
+
+  BRING-UP A  Docker quit/restart  - unpause alert, start Docker, wait for pods
+  BRING-UP B  Mac reboot           - A + restart the self-hosted GitHub runner
+                                     (a process on the Mac, not in the cluster)
+  BRING-UP C  Kubernetes Reset     - full rebuild: TLS secret, ingress
+                                     controller, /etc/hosts, CD redeploy
+
+What DOES change on an ordinary restart:
+
+* Containers restart, so in-memory counters reset to 0 - a sawtooth in Grafana.
+  Normal: rate() detects counter resets and compensates.
+* A permanent gap in the charts for the off period. Nothing was COLLECTED, so
+  there is nothing to back-fill - unlike a network outage, where the WAL replays
+  buffered samples with their original timestamps.
+
+Generalised lesson: a runbook that hides different scenarios behind conditional
+steps ("IF the cluster was reset...") will be misread under pressure. Name the
+scenarios and give each its own complete list.
 
 ⸻
 
@@ -1805,6 +1837,8 @@ Additional Concepts Learned
 ✓ No-Data Handling As An Intent Decision
 ✓ Notification Grouping, Repeat Interval, Alert Fatigue
 ✓ Silences, Mute Timings, Paused Rules (planned maintenance)
+✓ Cluster Restart vs Cluster Reset (etcd persistence)
+✓ Runbook Design (name scenarios, avoid conditional steps)
 
 
 
